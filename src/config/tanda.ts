@@ -1,5 +1,6 @@
 // Tanda W8 shell config — rehearsal targets (World Chain Sepolia 4801).
-// Canonical provenance: tanda-sync @6c48e48 (DEPLOY_RECEIPT_V2.json, W6-V2 live E2E).
+// Canonical provenance: FROZEN W10 pair (main @17a34e2b; live runtime shas in
+// tanda docs/W10_E2E_RECEIPT_20261116.md + PR#2; both source-verified on Worldscan).
 // W9 mainnet cutover flips only these env defaults (chain 480 + mainnet factory deploy).
 import type { Address } from 'viem';
 
@@ -11,13 +12,25 @@ export const TANDA = {
   rpcUrl:
     process.env.NEXT_PUBLIC_TANDA_RPC_URL ??
     'https://worldchain-sepolia.g.alchemy.com/public',
-  // W6-V2 canonical clone factory (world.json pin, source-verified on 4801)
+  // W10 canonical FROZEN pair: forwarder factory (callBill) + rotate-capable impl.
+  // ALL bill writes target this factory — clones are never client targets
+  // (MiniKit invalid_contract entrypoint gate, audit correction #1).
   factory: addr(process.env.NEXT_PUBLIC_TANDA_FACTORY,
-    '0x70A5dC7Ea69D19618335D89d84a32c2a605c2Ac6'),
+    '0x96B6Ebc35aD760561d26a6C57d5b3F491B524332'),
   implementation: addr(process.env.NEXT_PUBLIC_TANDA_IMPL,
-    '0x1Cb98A8Cd9FF8058DD327d505bc80eC73Cca27A5'),
-  // USDC on World Chain Sepolia — baked immutable in impl; recovered live from
-  // smoke createBill calldata (tx 0xdbd8dd14…, decoded token arg).
+    '0xD33A44fC56Fb859be08a8aAc5Cc26Cd2a27D47c6'),
+  // Era lineage for probeBill: which factory minted a bill decides its ABI.
+  //   W10 pair above -> rotate-capable, forwarder era
+  //   fast twin 0x65Ba0bB4 / 0x52d2b14c -> same code, 60s/120s constants (rehearsal bills)
+  //   pre-forwarder 0x70A5dC7E / 0x1Cb98A8C -> V2 ABI minus rotate/callBill
+  //   not in any registry + has code -> W5 legacy V1 (runtime-locked 0x8644…b12)
+  knownFactories: [
+    '0x96B6Ebc35aD760561d26a6C57d5b3F491B524332',
+    '0x65Ba0bB4959c2b6121d9e4Da822452aEEC6e61e6',
+    '0x70A5dC7Ea69D19618335D89d84a32c2a605c2Ac6',
+  ] as Address[],
+  // USDC on World Chain Sepolia — frozen; approve stays a DIRECT client call
+  // (spender is the clone; USDC is the second portal entrypoint).
   usdcSepolia: addr(process.env.NEXT_PUBLIC_TANDA_USDC,
     '0x66145f38cBAC35Ca6F1Dfb4914dF98F1614aeA88'),
   // W5-era direct deploy (non-factory). Legacy bills stay live — shell must
