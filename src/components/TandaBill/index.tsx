@@ -40,8 +40,11 @@ const publicClient = createPublicClient({
  * + Flux directive): factory clone (isBill true) binds V2 ABI — settlements()
  * 7-tuple + per-seat settlementPayouts(); legacy W5 direct (isBill false) binds
  * V1 ABI — settlements() 3-output (totalAmount, settledAt, initiatedAt), NO
- * MAX_HOLD/settlementPayouts on that lineage. Window anchor = initiatedAt
- * + SETTLEMENT_WINDOW (canonical gate; never last-confirm).
+ * MAX_HOLD/settlementPayouts on that lineage. WINDOW anchor is era-dependent
+ * (source-verified @275f116): V2 execute gates on fullyConfirmedAt+WINDOW
+ * (TandaBillV2.sol L260) with initiatedAt+MAX_HOLD as refund escape (L288);
+ * V1 gates on initiatedAt+WINDOW (c2066c1 L208). The W5 stale comment "after
+ * the last confirmation" (L149) is prose, not code.
  */
 async function probeBill(bill: Address): Promise<{
   era: Era;
@@ -75,15 +78,16 @@ async function probeBill(bill: Address): Promise<{
       const s = await read<[bigint, bigint, bigint, bigint, bigint, bigint, boolean]>('settlements', [0]);
       const payouts = await read<bigint[]>('settlementPayouts', [0]);
       lastSettlement =
-        `set#0 7-tuple total=${s[0]} initiatedAt=${s[2]} (window anchor; settled=${s[1]}) ` +
+        `set#0 7-tuple total=${s[0]} initiatedAt=${s[2]} fullyConfirmedAt=${s[5]} ` +
+        `(V2 execute gate=fullyConfirmedAt+WINDOW; refund escape=initiatedAt+MAX_HOLD; settled=${s[1]}) ` +
         `mask=${s[4]}/${s[3]} refunded=${s[6]} payouts=${payouts.length}`;
     } catch { /* no settlements yet */ }
   } else {
     // W5 era: 3 outputs only — payouts never existed, MAX_HOLD absent (escape
-    // hatch is V2-only). Never decode beyond index 2 here.
+    // hatch is V2-only). V1 execute gate = initiatedAt + WINDOW (no fullyConfirmedAt).
     try {
       const s = await read<[bigint, bigint, bigint]>('settlements', [0]);
-      lastSettlement = `set#0 LEGACY 3-tuple total=${s[0]} settledAt=${s[1]} initiatedAt=${s[2]} (window anchor)`;
+      lastSettlement = `set#0 LEGACY 3-tuple total=${s[0]} settledAt=${s[1]} initiatedAt=${s[2]} (V1 execute gate=initiatedAt+WINDOW)`;
     } catch { /* no settlements yet */ }
   }
   return { era: isFactoryBill ? 'factory' : 'legacy', token, window, maxHold, escrow, seatCount, lastSettlement };
