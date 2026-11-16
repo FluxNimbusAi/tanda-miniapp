@@ -50,11 +50,12 @@ async function probeBill(bill: Address): Promise<{
 }> {
   const code = await publicClient.getCode({ address: bill });
   if (!code || code === '0x')
-    return { era: 'unknown', token: ZERO, window: 0n, maxHold: 0n, escrow: 0n, seatCount: 0n, lastSettlement: 'no code at address' };
+    return { era: 'unknown', token: ZERO, window: BigInt(0), maxHold: BigInt(0), escrow: BigInt(0), seatCount: BigInt(0), lastSettlement: 'no code at address' };
   const isFactoryBill = await publicClient.readContract({
     address: TANDA.factory, abi: FactoryABI, functionName: 'isBill', args: [bill],
   }).catch(() => false);
-  const read = <T,>(fn: string, args: any[] = []): Promise<T> =>
+  const read = <T,>(fn: string, args: readonly unknown[] = []): Promise<T> =>
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     publicClient.readContract({ address: bill, abi: BillABI, functionName: fn, args } as any) as Promise<T>;
   const token = await read<Address>('token');
   const window = await read<bigint>('SETTLEMENT_WINDOW');
@@ -72,8 +73,6 @@ async function probeBill(bill: Address): Promise<{
   } catch { /* no settlements yet */ }
   return { era: isFactoryBill ? 'factory' : 'legacy', token, window, maxHold, escrow, seatCount, lastSettlement };
 }
-
-const zero: Address = '0x0000000000000000000000000000000000000000';
 
 export const TandaBill = () => {
   const [seatInput, setSeatInput] = useState('');
@@ -147,19 +146,25 @@ export const TandaBill = () => {
   return (
     <div className="grid w-full gap-4 rounded-xl border p-4">
       <p className="text-lg font-semibold">Tanda Bill (W8 shell — chain {TANDA.chainId})</p>
-      <LiveFeedback
-        label={{ failed: 'Transaction failed', pending: 'Transaction pending', success: 'Transaction confirmed' }}
-        state={state === 'idle' ? undefined : state}
-      />
       <input
         className="rounded border p-2 text-sm"
         placeholder="seat addresses, comma-separated (0x…,0x…)"
         value={seatInput}
         onChange={(e) => setSeatInput(e.target.value)}
       />
-      <Button onClick={onClickCreateBill} disabled={state === 'pending'}>
-        Create Bill (factory.createBill)
-      </Button>
+      <LiveFeedback
+        label={{
+          failed: 'Transaction failed',
+          pending: 'Transaction pending',
+          success: 'Bill created (confirmed)',
+        }}
+        state={state === 'idle' ? undefined : state}
+        className="w-full"
+      >
+        <Button onClick={onClickCreateBill} disabled={state === 'pending'} size="lg" className="w-full">
+          Create Bill (factory.createBill)
+        </Button>
+      </LiveFeedback>
       <input
         className="rounded border p-2 text-sm"
         placeholder="bill address to probe (factory clone or legacy direct)"
