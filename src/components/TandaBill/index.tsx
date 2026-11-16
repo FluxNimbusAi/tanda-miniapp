@@ -11,6 +11,7 @@
 //  - two eras: factory clones (isBill true) vs legacy direct (e.g. W5 0x8644…b12)
 import FactoryABI from '@/abi/TandaBillFactory.json';
 import BillABI from '@/abi/TandaBillV2.json';
+import BillV1ABI from '@/abi/TandaBillV1.json';
 import { TANDA } from '@/config/tanda';
 import { Button, LiveFeedback } from '@worldcoin/mini-apps-ui-kit-react';
 import { MiniKit } from '@worldcoin/minikit-js';
@@ -35,9 +36,12 @@ const publicClient = createPublicClient({
 });
 
 /**
- * Bill status probe with era detection:
- * factory clone => factory.isBill(bill) true; legacy direct => code exists but
- * isBill false. Binds V2 ABI either way; the era flag drives arity notes below.
+ * Bill status probe with era detection (MANDATORY branch, per Harley W8 delta
+ * + Flux directive): factory clone (isBill true) binds V2 ABI — settlements()
+ * 7-tuple + per-seat settlementPayouts(); legacy W5 direct (isBill false) binds
+ * V1 ABI — settlements() 3-output (totalAmount, settledAt, initiatedAt), NO
+ * MAX_HOLD/settlementPayouts on that lineage. Window anchor = initiatedAt
+ * + SETTLEMENT_WINDOW (canonical gate; never last-confirm).
  */
 async function probeBill(bill: Address): Promise<{
   era: Era;
@@ -54,23 +58,34 @@ async function probeBill(bill: Address): Promise<{
   const isFactoryBill = await publicClient.readContract({
     address: TANDA.factory, abi: FactoryABI, functionName: 'isBill', args: [bill],
   }).catch(() => false);
+  const abi = isFactoryBill ? BillABI : BillV1ABI;
   const read = <T,>(fn: string, args: readonly unknown[] = []): Promise<T> =>
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    publicClient.readContract({ address: bill, abi: BillABI, functionName: fn, args } as any) as Promise<T>;
+    publicClient.readContract({ address: bill, abi, functionName: fn, args } as any) as Promise<T>;
   const token = await read<Address>('token');
   const window = await read<bigint>('SETTLEMENT_WINDOW');
-  const maxHold = await read<bigint>('MAX_HOLD');
   const escrow = await read<bigint>('escrowBalance');
   const seatCount = await read<bigint>('activeSeatCount');
-  // settlements(id) 7-tuple: (id?..., per canonical ABI: [uint256,uint64,uint64,uint256,uint256,uint64,bool])
-  // + dynamic payouts array EXPOSED ONLY via settlementPayouts — struct-getter trap.
   const total = await read<bigint>('totalExpenses');
+  let maxHold = BigInt(0);
   let lastSettlement = `expenses=${total} (none initiated)`;
-  try {
-    const settling = await read<bigint[]>('settlements', [0]);
-    const payouts = await read<bigint[]>('settlementPayouts', [0]);
-    lastSettlement = `set#0 tuple=${settling.length}/7 payouts=${payouts.length} seats`;
-  } catch { /* no settlements yet */ }
+  if (isFactoryBill) {
+    maxHold = await read<bigint>('MAX_HOLD');
+    try {
+      const s = await read<[bigint, bigint, bigint, bigint, bigint, bigint, boolean]>('settlements', [0]);
+      const payouts = await read<bigint[]>('settlementPayouts', [0]);
+      lastSettlement =
+        `set#0 7-tuple total=${s[0]} initiatedAt=${s[2]} (window anchor; settled=${s[1]}) ` +
+        `mask=${s[4]}/${s[3]} refunded=${s[6]} payouts=${payouts.length}`;
+    } catch { /* no settlements yet */ }
+  } else {
+    // W5 era: 3 outputs only — payouts never existed, MAX_HOLD absent (escape
+    // hatch is V2-only). Never decode beyond index 2 here.
+    try {
+      const s = await read<[bigint, bigint, bigint]>('settlements', [0]);
+      lastSettlement = `set#0 LEGACY 3-tuple total=${s[0]} settledAt=${s[1]} initiatedAt=${s[2]} (window anchor)`;
+    } catch { /* no settlements yet */ }
+  }
   return { era: isFactoryBill ? 'factory' : 'legacy', token, window, maxHold, escrow, seatCount, lastSettlement };
 }
 
