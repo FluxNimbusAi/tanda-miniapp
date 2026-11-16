@@ -115,19 +115,34 @@ export async function POST(req: Request): Promise<Response> {
     return bad('mini_app_path must be a worldapp:// deep link');
   }
 
-  const upstream = await fetch(UPSTREAM, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      app_id: appId,
-      wallet_addresses: wallets,
-      localisations: body.localisations,
-      mini_app_path: miniAppPath,
-    }),
-  });
+  // Network egress note: this host blocks outbound TLS to developer.worldcoin.org
+  // (verified 2026-11-16); Vercel/serverless egress reaches it fine. Fail clean.
+  let upstream: Response | null = null;
+  try {
+    const ac = new AbortController();
+    const timer = setTimeout(() => ac.abort(), 9000);
+    upstream = await fetch(UPSTREAM, {
+      method: 'POST',
+      signal: ac.signal,
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        app_id: appId,
+        wallet_addresses: wallets,
+        localisations: body.localisations,
+        mini_app_path: miniAppPath,
+      }),
+    });
+    clearTimeout(timer);
+  } catch (err) {
+    const aborted = (err as Error)?.name === 'AbortError';
+    return Response.json(
+      { ok: false, error: aborted ? 'upstream timeout' : 'upstream unreachable' },
+      { status: 502 },
+    );
+  }
 
   const text = await upstream.text();
   return new Response(text, {
