@@ -6,6 +6,7 @@ import { UserInfo } from '@/components/UserInfo';
 import { Verify } from '@/components/Verify';
 import { TandaBill } from '@/components/TandaBill';
 import { ViewPermissions } from '@/components/ViewPermissions';
+import { NotificationConsent } from '@/components/NotificationConsent';
 import { Marble, TopBar } from '@worldcoin/mini-apps-ui-kit-react';
 
 export default async function Home() {
@@ -28,6 +29,7 @@ export default async function Home() {
       </Page.Header>
       <Page.Main className="flex flex-col items-center justify-start gap-4 mb-16">
         <UserInfo />
+        <NotificationConsent />
         <Verify action="test-action" />
         <Pay />
         <Transaction />

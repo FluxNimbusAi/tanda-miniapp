@@ -165,6 +165,10 @@ export const TandaBill = () => {
   return (
     <div className="grid w-full gap-4 rounded-xl border p-4">
       <p className="text-lg font-semibold">Tanda Bill (W8 shell — chain {TANDA.chainId})</p>
+      <p className="text-xs opacity-70">
+        Funded means funded — USDC sits in escrow from day one. When everyone
+        confirms, money moves; nobody can ghost a payout.
+      </p>
       <input
         className="rounded border p-2 text-sm"
         placeholder="seat addresses, comma-separated (0x…,0x…)"
@@ -181,7 +185,7 @@ export const TandaBill = () => {
         className="w-full"
       >
         <Button onClick={onClickCreateBill} disabled={state === 'pending'} size="lg" className="w-full">
-          Create Bill (factory.createBill)
+          Start a guaranteed bill
         </Button>
       </LiveFeedback>
       <input
