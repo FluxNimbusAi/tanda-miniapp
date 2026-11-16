@@ -26,7 +26,7 @@ import {
   type Address,
 } from 'viem';
 
-type Era = 'factory' | 'legacy' | 'unknown';
+type Era = 'factory-w10' | 'factory-v2' | 'legacy' | 'unknown';
 
 const ZERO: Address = '0x0000000000000000000000000000000000000000';
 
@@ -58,9 +58,29 @@ async function probeBill(bill: Address): Promise<{
   const code = await publicClient.getCode({ address: bill });
   if (!code || code === '0x')
     return { era: 'unknown', token: ZERO, window: BigInt(0), maxHold: BigInt(0), escrow: BigInt(0), seatCount: BigInt(0), lastSettlement: 'no code at address' };
-  const isFactoryBill = await publicClient.readContract({
-    address: TANDA.factory, abi: FactoryABI, functionName: 'isBill', args: [bill],
-  }).catch(() => false);
+  // W10 multi-factory era detect: whichever KNOWN_FACTORY registered the clone
+  // decides lineage; a readable factory() getter on the bill marks the
+  // rotate-capable forwarder era (pre-W10 clones revert it -> factory-v2).
+  let mintedBy: Address | null = null;
+  const isClone = code.length === 92; // EIP-1167 runtime = 45 B (0x + 90 hex)
+  for (let attempt = 0; attempt < (isClone ? 4 : 1) && !mintedBy; attempt++) {
+    if (attempt) await new Promise((r) => setTimeout(r, 1200)); // replica-lag guard: a bill minted seconds ago may read isBill=false on stale replicas
+    for (const f of TANDA.knownFactories) {
+      const isB = await publicClient
+        .readContract({ address: f, abi: FactoryABI, functionName: 'isBill', args: [bill] })
+        .catch(() => false);
+      if (isB) { mintedBy = f; break; }
+    }
+  }
+  let rotationCapable = false;
+  if (mintedBy) {
+    rotationCapable = await publicClient
+      .readContract({ address: bill, abi: BillABI, functionName: 'factory' })
+      .then(() => true)
+      .catch(() => false);
+  }
+  const isFactoryBill = mintedBy !== null;
+  const era: Era = !isFactoryBill ? 'legacy' : rotationCapable ? 'factory-w10' : 'factory-v2';
   const abi = isFactoryBill ? BillABI : BillV1ABI;
   const read = <T,>(fn: string, args: readonly unknown[] = []): Promise<T> =>
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -90,7 +110,7 @@ async function probeBill(bill: Address): Promise<{
       lastSettlement = `set#0 LEGACY 3-tuple total=${s[0]} settledAt=${s[1]} initiatedAt=${s[2]} (V1 execute gate=initiatedAt+WINDOW)`;
     } catch { /* no settlements yet */ }
   }
-  return { era: isFactoryBill ? 'factory' : 'legacy', token, window, maxHold, escrow, seatCount, lastSettlement };
+  return { era, token, window, maxHold, escrow, seatCount, lastSettlement };
 }
 
 export const TandaBill = () => {
