@@ -16,18 +16,19 @@ import FactoryABI from '@/abi/TandaBillFactory.json';
 import BillABI from '@/abi/TandaBillV2.json';
 import BillV1ABI from '@/abi/TandaBillV1.json';
 import { TANDA } from '@/config/tanda';
-import { billAction, maskBit, type SeatRow } from '@/lib/billActions';
+import { billAction, maskBit, usdcApprove, type SeatRow } from '@/lib/billActions';
 import { Button, LiveFeedback } from '@worldcoin/mini-apps-ui-kit-react';
 import { MiniKit } from '@worldcoin/minikit-js';
 import { useWaitForUserOperationReceipt } from '@worldcoin/minikit-react';
 import { useSession } from 'next-auth/react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { worldchainSepolia } from 'viem/chains';
 import {
   createPublicClient,
   encodeFunctionData,
   http,
   isAddress,
+  parseUnits,
   type Address,
 } from 'viem';
 
@@ -53,6 +54,7 @@ type BillSnapshot = {
   confirmedMask: bigint;
   fullyConfirmedAt: bigint;
   refunded: boolean;
+  owner: Address;
 };
 
 /**
@@ -71,7 +73,7 @@ async function probeBill(bill: Address): Promise<BillSnapshot> {
     era: 'unknown', token: ZERO, window: BigInt(0), maxHold: BigInt(0),
     escrow: BigInt(0), seatCount: BigInt(0), lastSettlement: 'no code at address',
     initiatedAt: BigInt(0), settledAt: BigInt(0), confirmedMask: BigInt(0),
-    fullyConfirmedAt: BigInt(0), refunded: false,
+    fullyConfirmedAt: BigInt(0), refunded: false, owner: ZERO,
   };
   const code = await publicClient.getCode({ address: bill });
   if (!code || code === '0x') return blank;
@@ -111,6 +113,7 @@ async function probeBill(bill: Address): Promise<BillSnapshot> {
   snap.lastSettlement = `expenses=${total} (none initiated)`;
   if (isFactoryBill) {
     snap.maxHold = await read<bigint>('MAX_HOLD');
+    snap.owner = await read<Address>('owner');
     try {
       // tuple order (frozen ABI): totalAmount, settledAt, initiatedAt,
       // expectedMask, confirmedMask, fullyConfirmedAt, refunded
@@ -209,6 +212,10 @@ export const TandaBill = () => {
   const [snap, setSnap] = useState<BillSnapshot | null>(null);
   const [seats, setSeats] = useState<SeatRow[]>([]);
   const [nowSec, setNowSec] = useState(0);
+  const [expenseAmt, setExpenseAmt] = useState('');
+  const [fundAmt, setFundAmt] = useState('');
+  // fund = approve THEN fundEscrow; amount parked here between the two userOps.
+  const pendingFund = useRef<bigint | null>(null);
 
   const session = useSession();
   const myWallet = (session.data?.user as { walletAddress?: string } | undefined)
@@ -239,9 +246,16 @@ export const TandaBill = () => {
       setState('success');
       setStatus(`${actionLabel || 'createBill'} confirmed — refreshing chain state`);
       setUserOpHash('');
+      if (actionLabel === 'approve' && pendingFund.current !== null && billAddr) {
+        const amt = pendingFund.current;
+        pendingFund.current = null;
+        const a2 = billAction(billAddr, TANDA.factory, 'fundEscrow', [amt]);
+        void sendAction('fundEscrow', a2.to, a2.data);
+      }
       if (billAddr) void refresh(billAddr);
     } else if (isError && userOpHash) {
       setState('failed');
+      pendingFund.current = null;
       setUserOpHash('');
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -339,6 +353,44 @@ export const TandaBill = () => {
     void sendAction('rotateSeatWallet', a.to, a.data);
   };
 
+  // --- Owner console (frozen V2 semantics; every write through billAction,
+  //     the ONE sanctioned approve path is usdcApprove: to=USDC, spender=clone) ---
+  const isOwner = snap !== null && myWallet !== undefined &&
+    snap.owner.toLowerCase() === myWallet.toLowerCase();
+  const parseAmt = (s: string): bigint | null => {
+    try {
+      // Canonical token is 6-decimal USDC on this chain (frozen; no dynamic
+      // decimals probe on the write path — amount intent is owner-typed).
+      const v = parseUnits(s.trim(), 6);
+      return v > BigInt(0) ? v : null;
+    } catch { return null; }
+  };
+  const doAddExpense = () => {
+    if (!billAddr) return;
+    const amt = parseAmt(expenseAmt);
+    if (amt === null) { setStatus('expense: positive USDC amount required'); return; }
+    const a = billAction(billAddr, TANDA.factory, 'addExpense', [amt]);
+    void sendAction('addExpense', a.to, a.data);
+  };
+  const doFund = () => {
+    if (!billAddr) return;
+    const amt = parseAmt(fundAmt);
+    if (amt === null) { setStatus('fund: positive USDC amount required'); return; }
+    pendingFund.current = amt;
+    const ap = usdcApprove(TANDA.usdcSepolia, billAddr, amt);
+    void sendAction('approve', ap.to, ap.data);
+  };
+  const doInitiate = () => {
+    if (!billAddr) return;
+    const a = billAction(billAddr, TANDA.factory, 'initiateSettlement', []);
+    void sendAction('initiateSettlement', a.to, a.data);
+  };
+  const doRefund = () => {
+    if (!billAddr) return;
+    const a = billAction(billAddr, TANDA.factory, 'refundSettlement', [BigInt(0)]);
+    void sendAction('refundSettlement', a.to, a.data);
+  };
+
   const verifiedCount = seats.filter((s) => s.verified === true).length;
   const confirmedCount = seats.filter((s) => s.confirmed).length;
 
@@ -411,6 +463,37 @@ export const TandaBill = () => {
                 disabled={state === 'pending' || rotateLocked || !isAddress(rotateInput)}>
                 {rotateLocked ? 'Rotation locked (settlement in flight)' : 'Rotate my wallet'}
               </Button>
+            </div>
+          )}
+          {forwarderEra && isOwner && (
+            <div className="grid gap-1 border-t border-dashed pt-2">
+              <p className="text-xs font-semibold opacity-70">Owner console</p>
+              <div className="flex gap-1">
+                <input className="w-full rounded border p-2 text-xs" placeholder="expense USDC (e.g. 12.50)"
+                  value={expenseAmt} onChange={(e) => setExpenseAmt(e.target.value)} />
+                <Button onClick={doAddExpense} variant="secondary" size="sm"
+                  disabled={state === 'pending' || (initiated && snap !== null && snap.settledAt === BigInt(0) && !snap.refunded)}>
+                  Add expense
+                </Button>
+              </div>
+              <div className="flex gap-1">
+                <input className="w-full rounded border p-2 text-xs" placeholder="fund USDC (approve → escrow)"
+                  value={fundAmt} onChange={(e) => setFundAmt(e.target.value)} />
+                <Button onClick={doFund} variant="secondary" size="sm"
+                  disabled={state === 'pending' || parseAmt(fundAmt) === null}>
+                  Fund escrow
+                </Button>
+              </div>
+              {!initiated && (
+                <Button onClick={doInitiate} variant="secondary" size="sm" disabled={state === 'pending'}>
+                  Initiate settlement
+                </Button>
+              )}
+              {initiated && snap !== null && snap.settledAt === BigInt(0) && !snap.refunded && (
+                <Button onClick={doRefund} variant="tertiary" size="sm" disabled={state === 'pending'}>
+                  Refund settlement (bounded escape)
+                </Button>
+              )}
             </div>
           )}
           {snap.era === 'legacy' && (
