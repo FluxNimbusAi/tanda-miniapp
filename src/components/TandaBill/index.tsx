@@ -398,8 +398,8 @@ export const TandaBill = () => {
     <div className="grid w-full gap-4 rounded-xl border p-4">
       <p className="text-lg font-semibold">Tanda Bill (W8 shell — chain {TANDA.chainId})</p>
       <p className="text-xs opacity-70">
-        Funded means funded — USDC sits in escrow from day one. When everyone
-        confirms, money moves; nobody can ghost a payout.
+        Funded means funded. USDC sits in escrow from day one. When everyone
+        confirms, money moves — nobody can ghost your payout.
       </p>
       <input
         className="rounded border p-2 text-sm"
@@ -442,9 +442,15 @@ export const TandaBill = () => {
           </div>
 
           {forwarderEra && initiated && mySeat && !mineConfirmed && (
-            <Button onClick={doConfirm} variant="secondary" size="sm" disabled={state === 'pending'}>
-              Confirm my seat
-            </Button>
+            <div className="grid gap-1">
+              <p className="text-xs opacity-70">
+                Your share is already in the contract. Confirming just says
+                yes — it can&apos;t be un-funded.
+              </p>
+              <Button onClick={doConfirm} variant="secondary" size="sm" disabled={state === 'pending'}>
+                Confirm my seat
+              </Button>
+            </div>
           )}
           {executable && (
             <Button onClick={doExecute} variant="secondary" size="sm" disabled={state === 'pending'}>
@@ -484,6 +490,11 @@ export const TandaBill = () => {
                   Fund escrow
                 </Button>
               </div>
+              {snap.escrow > BigInt(0) && (
+                <p className="text-xs opacity-70">
+                  Escrow locked — the math is done, the money&apos;s already here.
+                </p>
+              )}
               {!initiated && (
                 <Button onClick={doInitiate} variant="secondary" size="sm" disabled={state === 'pending'}>
                   Initiate settlement
@@ -495,6 +506,11 @@ export const TandaBill = () => {
                 </Button>
               )}
             </div>
+          )}
+          {snap.settledAt > BigInt(0) && (
+            <p className="text-xs font-semibold opacity-80">
+              Settled on-chain. No IOUs, no reminders needed, no begging.
+            </p>
           )}
           {snap.era === 'legacy' && (
             <p className="text-xs opacity-60">
