@@ -12,11 +12,20 @@
 // W10 slice: ALL bill writes route through factory.callBill (billAction helper) —
 // clones are never targets (MiniKit invalid_contract gate). P0.3 badge feed reads
 // /api/seat-grants (read-only indexer view; absent table = neutral chips).
+// P0.3 badge UI slice (t_d1c1cf68): per-seat <SeatBadge> with three visually
+// distinct states resolved purely from the exposed feed via lib/seatVerification.
 import FactoryABI from '@/abi/TandaBillFactory.json';
 import BillABI from '@/abi/TandaBillV2.json';
 import BillV1ABI from '@/abi/TandaBillV1.json';
+import { SeatBadge } from '@/components/SeatBadge';
 import { TANDA } from '@/config/tanda';
 import { billAction, maskBit, usdcApprove, type SeatRow } from '@/lib/billActions';
+import {
+  flagToVerification,
+  resolveSeatVerification,
+  verificationToFlag,
+  type SeatGrantsFeed,
+} from '@/lib/seatVerification';
 import { Button, LiveFeedback } from '@worldcoin/mini-apps-ui-kit-react';
 import { MiniKit } from '@worldcoin/minikit-js';
 import { useWaitForUserOperationReceipt } from '@worldcoin/minikit-react';
@@ -142,6 +151,24 @@ async function probeBill(bill: Address): Promise<BillSnapshot> {
   return snap;
 }
 
+/** P0.3 badge layer: fold /api/seat-grants state into seat rows. Any feed
+ *  failure (down route, bad JSON, missing table) leaves rows neutral —
+ *  never blanks or crashes the roster (resolveSeatVerification can't throw). */
+async function loadBadges(bill: Address, rows: SeatRow[]): Promise<SeatRow[]> {
+  try {
+    const res = await fetch(`/api/seat-grants?bill=${bill}`);
+    if (!res.ok) return rows;
+    const body = (await res.json().catch(() => null)) as SeatGrantsFeed;
+    return rows.map((r) => ({
+      ...r,
+      verified: verificationToFlag(resolveSeatVerification(body, r.wallet)),
+    }));
+  } catch {
+    /* badge feed down: neutral chips, roster stays live */
+    return rows;
+  }
+}
+
 /** Active seat roster via seats(i) walk (swap-pop removal keeps indices dense;
  *  seatIdOf maps wallet -> index; confirmed bit from settlement mask). */
 async function fetchSeatRows(bill: Address, snap: BillSnapshot): Promise<SeatRow[]> {
@@ -171,18 +198,8 @@ async function fetchSeatRows(bill: Address, snap: BillSnapshot): Promise<SeatRow
     } catch { /* read failure on one seat never blanks the roster */ }
   }
   // P0.3 badges: read-only grants view. indexed=true -> ungranted wallets are
-  // explicitly "unindexed"; feed absent -> every row stays neutral (null).
-  try {
-    const res = await fetch(`/api/seat-grants?bill=${bill}`);
-    if (res.ok) {
-      const body = await res.json() as { grants?: Record<string, unknown>; indexed?: boolean };
-      const grants = body.grants ?? {};
-      for (const r of rows) {
-        r.verified = r.wallet.toLowerCase() in grants ? true : body.indexed === true ? false : null;
-      }
-    }
-  } catch { /* badge feed down: neutral chips, roster stays live */ }
-  return rows;
+  // explicitly "unverified"; feed absent -> every row stays neutral (null).
+  return loadBadges(bill, rows);
 }
 
 const Badge = ({ seat, mine }: { seat: SeatRow; mine: boolean }) => (
@@ -193,9 +210,8 @@ const Badge = ({ seat, mine }: { seat: SeatRow; mine: boolean }) => (
     </span>
     <span className="flex shrink-0 gap-1">
       {seat.confirmed && <span className="rounded bg-sky-500/20 px-1.5 py-0.5 text-sky-600">✓ confirmed</span>}
-      {seat.verified === true && <span className="rounded bg-emerald-500/20 px-1.5 py-0.5 text-emerald-600">⬡ human</span>}
-      {seat.verified === false && <span className="rounded bg-slate-500/20 px-1.5 py-0.5 text-slate-500">unindexed</span>}
-      {seat.verified === null && <span className="rounded bg-slate-500/10 px-1.5 py-0.5 text-slate-400">no badge feed</span>}
+      {/* P0.3: one World ID verification badge per seat (t_d1c1cf68). */}
+      <SeatBadge status={flagToVerification(seat.verified)} />
     </span>
   </span>
 );
@@ -216,6 +232,9 @@ export const TandaBill = () => {
   const [fundAmt, setFundAmt] = useState('');
   // fund = approve THEN fundEscrow; amount parked here between the two userOps.
   const pendingFund = useRef<bigint | null>(null);
+  // P0.3 badge refresh: latest rows outside render + busy flag for the button.
+  const seatsRef = useRef<SeatRow[]>([]);
+  const [badgeBusy, setBadgeBusy] = useState(false);
 
   const session = useSession();
   const myWallet = (session.data?.user as { walletAddress?: string } | undefined)
@@ -233,9 +252,25 @@ export const TandaBill = () => {
       publicClient.getBlock().catch(() => null),
     ]);
     setSnap(p);
+    seatsRef.current = rows;
     setSeats(rows);
     if (block) setNowSec(Number(block.timestamp));
     return p;
+  };
+
+  // P0.3: badge-only refresh — refetches /api/seat-grants for the probed
+  // bill without re-reading chain state; used to flip badges live after a
+  // World ID verification lands in the grant index.
+  const doRefreshBadges = async () => {
+    if (!billAddr) return;
+    setBadgeBusy(true);
+    try {
+      const updated = await loadBadges(billAddr, seatsRef.current);
+      seatsRef.current = updated;
+      setSeats(updated);
+    } finally {
+      setBadgeBusy(false);
+    }
   };
 
   useEffect(() => {
@@ -392,6 +427,8 @@ export const TandaBill = () => {
   };
 
   const verifiedCount = seats.filter((s) => s.verified === true).length;
+  const unverifiedCount = seats.filter((s) => s.verified === false).length;
+  const unknownCount = seats.filter((s) => s.verified == null).length;
   const confirmedCount = seats.filter((s) => s.confirmed).length;
 
   return (
@@ -432,9 +469,17 @@ export const TandaBill = () => {
 
       {snap && snap.era !== 'unknown' && billAddr && (
         <div className="grid gap-2 border-t pt-3">
-          <p className="text-xs font-semibold opacity-80">
-            Roster — {verifiedCount} verified humans · {confirmedCount}/{seats.length} confirmed
-          </p>
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-xs font-semibold opacity-80">
+              Roster — {verifiedCount} World ID verified · {unverifiedCount} unverified
+              {unknownCount > 0 ? ` · ${unknownCount} unknown` : ''}
+              {' '}· {confirmedCount}/{seats.length} confirmed
+            </p>
+            <Button onClick={() => void doRefreshBadges()} variant="tertiary" size="sm"
+              disabled={badgeBusy}>
+              {badgeBusy ? 'Refreshing badges…' : 'Refresh badges'}
+            </Button>
+          </div>
           <div className="grid gap-1">
             {seats.map((s) => (
               <Badge key={s.seatId} seat={s} mine={s.wallet.toLowerCase() === myWallet} />
