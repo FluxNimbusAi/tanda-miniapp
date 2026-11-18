@@ -1,0 +1,3 @@
+# Golden snapshots are byte-compared by tests (readFileSync vs in-memory LF render).
+# Force LF on checkout even on hosts with core.autocrlf=true (Windows dev lanes).
+src/lib/__snapshots__/*.txt text eol=lf

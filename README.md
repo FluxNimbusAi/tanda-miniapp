@@ -1,3 +1,5 @@
+[![CI](https://github.com/FluxNimbusAi/tanda-miniapp/actions/workflows/ci.yml/badge.svg)](https://github.com/FluxNimbusAi/tanda-miniapp/actions/workflows/ci.yml)
+
 ## Create a Mini App
 
 [Mini apps](https://docs.worldcoin.org/mini-apps) enable third-party developers to create native-like applications within World App.
