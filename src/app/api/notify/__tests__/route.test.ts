@@ -116,7 +116,8 @@ describe('engine → dispatcher: mini_app_path seam (fix #1)', () => {
   });
 
   it('omitted path still falls back to /home deep link (pre-existing behavior)', async () => {
-    const { mini_app_path: _drop, ...noPath } = enginePayload();
+    const noPath: Record<string, unknown> = { ...enginePayload() };
+    delete noPath.mini_app_path; // no unused-var destructuring (next build lint)
     await post(noPath);
     expect(calls[0].body.mini_app_path).toBe(
       `worldapp://mini-app?app_id=${APP_ID}&path=/home`,
