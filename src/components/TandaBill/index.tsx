@@ -18,6 +18,8 @@ import FactoryABI from '@/abi/TandaBillFactory.json';
 import BillABI from '@/abi/TandaBillV2.json';
 import BillV1ABI from '@/abi/TandaBillV1.json';
 import { PostConfirmRotationFlag, SeatBadge } from '@/components/SeatBadge';
+import { NudgeCountdown } from '@/components/NudgeCountdown';
+import { nudgeStatus } from '@/lib/nudgeStatus';
 import { TANDA } from '@/config/tanda';
 import { billAction, maskBit, usdcApprove, type SeatRow } from '@/lib/billActions';
 import {
@@ -36,6 +38,7 @@ import { worldchainSepolia } from 'viem/chains';
 import {
   createPublicClient,
   encodeFunctionData,
+  formatUnits,
   http,
   isAddress,
   parseUnits,
@@ -412,6 +415,18 @@ export const TandaBill = () => {
     snap.settledAt === BigInt(0) && !snap.refunded &&
     nowSec < Number(snap.initiatedAt + snap.maxHold);
 
+  // P1.1b render lane (t_p11b_nudge_render): derive the nudge landing state
+  // (refund/execute countdown — the exact moments N2b/N2c/N3a push about)
+  // from the same probed snapshot the gates above read. No new RPC, no new
+  // state, pure derivation; nowSec is 0 until the first probe lands a block
+  // timestamp, so nothing renders on a cold mount.
+  const nudge = snap !== null && nowSec > 0 ? nudgeStatus(snap, nowSec) : null;
+  const escrowUSDC =
+    snap !== null && snap.era !== 'unknown' && snap.era !== 'legacy' &&
+    snap.escrow > BigInt(0)
+      ? formatUnits(snap.escrow, 6).replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '')
+      : undefined;
+
   const doConfirm = () => {
     if (!billAddr) return;
     const a = billAction(billAddr, TANDA.factory, 'confirmSettlement', [BigInt(0)]);
@@ -525,6 +540,9 @@ export const TandaBill = () => {
               <Badge key={s.seatId} seat={s} mine={s.wallet.toLowerCase() === myWallet} />
             ))}
           </div>
+
+          {/* P1.1b: the cadence-nudge landing state the push promised. */}
+          {nudge !== null && <NudgeCountdown status={nudge} usdc={escrowUSDC} />}
 
           {forwarderEra && initiated && mySeat && !mineConfirmed && (
             <div className="grid gap-1">

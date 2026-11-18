@@ -109,10 +109,25 @@ export async function POST(req: Request): Promise<Response> {
     return Response.json({ ok: true, deduped: true });
   }
 
-  const miniAppPath =
-    body.mini_app_path ?? `worldapp://mini-app?app_id=${appId}&path=/home`;
+  // P1.1b seam fix (t_p11b_nudge_render): the cadence-nudge engine sends a
+  // ROOT-RELATIVE mini_app_path ("/home" — spec §3 link column, pinned by its
+  // self-test) because the engine never knows our app_id. This route owns the
+  // app_id, so resolve root-relative paths into the canonical
+  // worldapp:// deep link here (W10 spec §3 form). Without this, the shipped
+  // engine's payload failed the old startsWith('worldapp://') gate with 400
+  // on every single send. Full worldapp:// links (in-app callers) pass
+  // through untouched; protocol-relative or anything else is still rejected.
+  let miniAppPath = body.mini_app_path;
+  if (
+    typeof miniAppPath === 'string' &&
+    miniAppPath.startsWith('/') &&
+    !miniAppPath.startsWith('//') // no protocol-relative "//evil" smuggling
+  ) {
+    miniAppPath = `worldapp://mini-app?app_id=${appId}&path=${miniAppPath}`;
+  }
+  miniAppPath ??= `worldapp://mini-app?app_id=${appId}&path=/home`;
   if (typeof miniAppPath !== 'string' || !miniAppPath.startsWith('worldapp://')) {
-    return bad('mini_app_path must be a worldapp:// deep link');
+    return bad('mini_app_path must be /root-relative or a worldapp:// deep link');
   }
 
   // Network egress note: this host blocks outbound TLS to developer.worldcoin.org
@@ -145,6 +160,20 @@ export async function POST(req: Request): Promise<Response> {
   }
 
   const text = await upstream.text();
+  // P1.1b seam fix #2 (t_p11b_nudge_render): the engine's dispatcher contract
+  // (cadence-nudge spec §5) is `ok:true` on send success — but World's raw
+  // schema is {status:"success",…} with NO `ok` field, and a verbatim
+  // pass-through made every real send look failed to the engine (retry ×3 →
+  // dead-letter). 2xx merges the upstream JSON with ok:true (fields kept for
+  // in-app callers); non-2xx stays verbatim so the engine keeps 'queued'.
+  if (upstream.ok) {
+    try {
+      const parsed = JSON.parse(text) as Record<string, unknown>;
+      return Response.json({ ...parsed, ok: true }, { status: upstream.status });
+    } catch {
+      return Response.json({ ok: true, raw: text }, { status: upstream.status });
+    }
+  }
   return new Response(text, {
     status: upstream.status,
     headers: { 'content-type': upstream.headers.get('content-type') ?? 'application/json' },
