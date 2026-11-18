@@ -1,0 +1,50 @@
+name: CI
+
+# Honest-green web gate: install (npm ci, lockfile-pinned), typecheck,
+# unit tests when a suite exists on the ref, and a production build.
+#
+# Scope notes (2026-11-17):
+# - No prettier gate yet: main carries a pre-existing format backlog from
+#   the upstream template; a repo-wide reformat would collide with open
+#   branches. Tracked separately.
+# - Unit tests: `node --test` with native TS type-stripping (Node 26,
+#   matching the dev lane). Until the P1.4a settlement-vector suite
+#   merges, there are no *.test.ts files on main; the step reports that
+#   honestly instead of pretending to run tests, and executes the suite
+#   automatically once it lands.
+# - next build runs with no env: all World/Minikit env reads are
+#   request-time, verified locally 2026-11-17.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26
+          cache: npm
+
+      - name: Install (lockfile-pinned)
+        run: npm ci
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Unit tests (guarded)
+        run: |
+          if compgen -G "src/lib/__tests__/*.test.ts" > /dev/null; then
+            node --test src/lib/__tests__/
+          else
+            echo "No unit-test suite on this ref yet — P1.4a adds settlementVector tests; this step will run them automatically once merged."
+          fi
+
+      - name: Production build
+        run: npm run build
