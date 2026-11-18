@@ -47,3 +47,20 @@ export const SeatBadgeFromFlag = ({
 }: {
   verified: boolean | null | undefined;
 }) => <SeatBadge status={flagToVerification(verified)} />;
+
+// C2 ruling addendum (t_96389deb, Flux 2026-11-17 Option A): the badge strip
+// MUST surface "⚠ post-confirm rotation" for seats whose SeatWalletRotated
+// event landed after fullyConfirmedAt while already in confirmedMask. Purely
+// event-derived visibility flag — amber family, distinct from the emerald/
+// rose/slate verification states, own testid and a11y contract.
+export const PostConfirmRotationFlag = () => (
+  <span
+    data-testid="seat-anomaly"
+    role="img"
+    aria-label="anomaly post-confirm rotation"
+    title="This seat rotated its wallet AFTER the bill fully confirmed — the payout still follows the wallet that confirmed, unless the execute window elapsed"
+    className="shrink-0 rounded border border-amber-500/50 bg-amber-500/15 px-1.5 py-0.5 text-[11px] leading-none text-amber-600"
+  >
+    ⚠ post-confirm rotation
+  </span>
+);
