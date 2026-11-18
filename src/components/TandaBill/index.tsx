@@ -1,4 +1,4 @@
-'use client';
+"use client";
 
 // Tanda W8 shell — STAGED CONTRACT LANE (rehearsal, zero real money).
 // Provenance: tanda-sync @6c48e48; binding rules from
@@ -14,27 +14,40 @@
 // /api/seat-grants (read-only indexer view; absent table = neutral chips).
 // P0.3 badge UI slice (t_d1c1cf68): per-seat <SeatBadge> with three visually
 // distinct states resolved purely from the exposed feed via lib/seatVerification.
-import FactoryABI from '@/abi/TandaBillFactory.json';
-import BillABI from '@/abi/TandaBillV2.json';
-import BillV1ABI from '@/abi/TandaBillV1.json';
-import { PostConfirmRotationFlag, SeatBadge } from '@/components/SeatBadge';
-import { NudgeCountdown } from '@/components/NudgeCountdown';
-import { nudgeStatus } from '@/lib/nudgeStatus';
-import { TANDA } from '@/config/tanda';
-import { billAction, maskBit, usdcApprove, type SeatRow } from '@/lib/billActions';
+import FactoryABI from "@/abi/TandaBillFactory.json";
+import BillABI from "@/abi/TandaBillV2.json";
+import BillV1ABI from "@/abi/TandaBillV1.json";
+import { PostConfirmRotationFlag, SeatBadge } from "@/components/SeatBadge";
+import { SettlementVectorTable } from "@/components/SettlementVector";
+import { NudgeCountdown } from "@/components/NudgeCountdown";
+import { nudgeStatus } from "@/lib/nudgeStatus";
+import {
+  buildSettlementVector,
+  type SettlementVector,
+} from "@/lib/settlementVector";
+import { TANDA } from "@/config/tanda";
+import {
+  billAction,
+  maskBit,
+  usdcApprove,
+  type SeatRow,
+} from "@/lib/billActions";
 import {
   flagToVerification,
   resolveSeatVerification,
   verificationToFlag,
   type SeatGrantsFeed,
-} from '@/lib/seatVerification';
-import { computePostConfirmRotations, type RotationEventLite } from '@/lib/rotationAnomaly';
-import { Button, LiveFeedback } from '@worldcoin/mini-apps-ui-kit-react';
-import { MiniKit } from '@worldcoin/minikit-js';
-import { useWaitForUserOperationReceipt } from '@worldcoin/minikit-react';
-import { useSession } from 'next-auth/react';
-import { useEffect, useRef, useState } from 'react';
-import { worldchainSepolia } from 'viem/chains';
+} from "@/lib/seatVerification";
+import {
+  computePostConfirmRotations,
+  type RotationEventLite,
+} from "@/lib/rotationAnomaly";
+import { Button, LiveFeedback } from "@worldcoin/mini-apps-ui-kit-react";
+import { MiniKit } from "@worldcoin/minikit-js";
+import { useWaitForUserOperationReceipt } from "@worldcoin/minikit-react";
+import { useSession } from "next-auth/react";
+import { useEffect, useRef, useState } from "react";
+import { worldchainSepolia } from "viem/chains";
 import {
   createPublicClient,
   encodeFunctionData,
@@ -43,11 +56,11 @@ import {
   isAddress,
   parseUnits,
   type Address,
-} from 'viem';
+} from "viem";
 
-type Era = 'factory-w10' | 'factory-v2' | 'legacy' | 'unknown';
+type Era = "factory-w10" | "factory-v2" | "legacy" | "unknown";
 
-const ZERO: Address = '0x0000000000000000000000000000000000000000';
+const ZERO: Address = "0x0000000000000000000000000000000000000000";
 
 const publicClient = createPublicClient({
   chain: worldchainSepolia,
@@ -65,6 +78,8 @@ type BillSnapshot = {
   initiatedAt: bigint;
   settledAt: bigint;
   confirmedMask: bigint;
+  settlementTotal: bigint;
+  expectedMask: bigint;
   fullyConfirmedAt: bigint;
   refunded: boolean;
   owner: Address;
@@ -83,13 +98,24 @@ type BillSnapshot = {
  */
 async function probeBill(bill: Address): Promise<BillSnapshot> {
   const blank: BillSnapshot = {
-    era: 'unknown', token: ZERO, window: BigInt(0), maxHold: BigInt(0),
-    escrow: BigInt(0), seatCount: BigInt(0), lastSettlement: 'no code at address',
-    initiatedAt: BigInt(0), settledAt: BigInt(0), confirmedMask: BigInt(0),
-    fullyConfirmedAt: BigInt(0), refunded: false, owner: ZERO,
+    era: "unknown",
+    token: ZERO,
+    window: BigInt(0),
+    maxHold: BigInt(0),
+    escrow: BigInt(0),
+    seatCount: BigInt(0),
+    lastSettlement: "no code at address",
+    initiatedAt: BigInt(0),
+    settledAt: BigInt(0),
+    confirmedMask: BigInt(0),
+    settlementTotal: BigInt(0),
+    expectedMask: BigInt(0),
+    fullyConfirmedAt: BigInt(0),
+    refunded: false,
+    owner: ZERO,
   };
   const code = await publicClient.getCode({ address: bill });
-  if (!code || code === '0x') return blank;
+  if (!code || code === "0x") return blank;
   // W10 multi-factory era detect: whichever KNOWN_FACTORY registered the clone
   // decides lineage; a readable factory() getter on the bill marks the
   // rotate-capable forwarder era (pre-W10 clones revert it -> factory-v2).
@@ -99,58 +125,80 @@ async function probeBill(bill: Address): Promise<BillSnapshot> {
     if (attempt) await new Promise((r) => setTimeout(r, 1200)); // replica-lag guard: a bill minted seconds ago may read isBill=false on stale replicas
     for (const f of TANDA.knownFactories) {
       const isB = await publicClient
-        .readContract({ address: f, abi: FactoryABI, functionName: 'isBill', args: [bill] })
+        .readContract({
+          address: f,
+          abi: FactoryABI,
+          functionName: "isBill",
+          args: [bill],
+        })
         .catch(() => false);
-      if (isB) { mintedBy = f; break; }
+      if (isB) {
+        mintedBy = f;
+        break;
+      }
     }
   }
   let rotationCapable = false;
   if (mintedBy) {
     rotationCapable = await publicClient
-      .readContract({ address: bill, abi: BillABI, functionName: 'factory' })
+      .readContract({ address: bill, abi: BillABI, functionName: "factory" })
       .then(() => true)
       .catch(() => false);
   }
   const isFactoryBill = mintedBy !== null;
-  const era: Era = !isFactoryBill ? 'legacy' : rotationCapable ? 'factory-w10' : 'factory-v2';
+  const era: Era = !isFactoryBill
+    ? "legacy"
+    : rotationCapable
+      ? "factory-w10"
+      : "factory-v2";
   const abi = isFactoryBill ? BillABI : BillV1ABI;
   const read = <T,>(fn: string, args: readonly unknown[] = []): Promise<T> =>
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    publicClient.readContract({ address: bill, abi, functionName: fn, args } as any) as Promise<T>;
+    publicClient.readContract(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      { address: bill, abi, functionName: fn, args } as any
+    ) as Promise<T>;
   const snap: BillSnapshot = { ...blank, era };
-  snap.token = await read<Address>('token');
-  snap.window = await read<bigint>('SETTLEMENT_WINDOW');
-  snap.escrow = await read<bigint>('escrowBalance');
-  snap.seatCount = await read<bigint>('activeSeatCount');
-  const total = await read<bigint>('totalExpenses');
+  snap.token = await read<Address>("token");
+  snap.window = await read<bigint>("SETTLEMENT_WINDOW");
+  snap.escrow = await read<bigint>("escrowBalance");
+  snap.seatCount = await read<bigint>("activeSeatCount");
+  const total = await read<bigint>("totalExpenses");
   snap.lastSettlement = `expenses=${total} (none initiated)`;
   if (isFactoryBill) {
-    snap.maxHold = await read<bigint>('MAX_HOLD');
-    snap.owner = await read<Address>('owner');
+    snap.maxHold = await read<bigint>("MAX_HOLD");
+    snap.owner = await read<Address>("owner");
     try {
       // tuple order (frozen ABI): totalAmount, settledAt, initiatedAt,
       // expectedMask, confirmedMask, fullyConfirmedAt, refunded
-      const s = await read<[bigint, bigint, bigint, bigint, bigint, bigint, boolean]>('settlements', [0]);
-      const payouts = await read<bigint[]>('settlementPayouts', [0]);
+      const s = await read<
+        [bigint, bigint, bigint, bigint, bigint, bigint, boolean]
+      >("settlements", [0]);
+      const payouts = await read<bigint[]>("settlementPayouts", [0]);
       snap.settledAt = s[1];
       snap.initiatedAt = s[2];
       snap.confirmedMask = s[4];
+      snap.settlementTotal = s[0];
+      snap.expectedMask = s[3];
       snap.fullyConfirmedAt = s[5];
       snap.refunded = s[6];
       snap.lastSettlement =
         `set#0 7-tuple total=${s[0]} initiatedAt=${s[2]} fullyConfirmedAt=${s[5]} ` +
         `(V2 execute gate=fullyConfirmedAt+WINDOW; refund escape=initiatedAt+MAX_HOLD; settled=${s[1]}) ` +
         `mask=${s[4]}/${s[3]} refunded=${s[6]} payouts=${payouts.length}`;
-    } catch { /* no settlements yet */ }
+    } catch {
+      /* no settlements yet */
+    }
   } else {
     // W5 era: 3 outputs only — payouts never existed, MAX_HOLD absent (escape
     // hatch is V2-only). V1 execute gate = initiatedAt + WINDOW (no fullyConfirmedAt).
     try {
-      const s = await read<[bigint, bigint, bigint]>('settlements', [0]);
+      const s = await read<[bigint, bigint, bigint]>("settlements", [0]);
       snap.settledAt = s[1];
       snap.initiatedAt = s[2];
       snap.lastSettlement = `set#0 LEGACY 3-tuple total=${s[0]} settledAt=${s[1]} initiatedAt=${s[2]} (V1 execute gate=initiatedAt+WINDOW)`;
-    } catch { /* no settlements yet */ }
+    } catch {
+      /* no settlements yet */
+    }
   }
   return snap;
 }
@@ -209,8 +257,11 @@ async function loadAnomalyFlags(bill: Address, snap: BillSnapshot): Promise<Set<
 
 /** Active seat roster via seats(i) walk (swap-pop removal keeps indices dense;
  *  seatIdOf maps wallet -> index; confirmed bit from settlement mask). */
-async function fetchSeatRows(bill: Address, snap: BillSnapshot): Promise<SeatRow[]> {
-  if (snap.era === 'unknown' || snap.era === 'legacy') return [];
+async function fetchSeatRows(
+  bill: Address,
+  snap: BillSnapshot,
+): Promise<SeatRow[]> {
+  if (snap.era === "unknown" || snap.era === "legacy") return [];
   const rows: SeatRow[] = [];
   const count = Number(snap.seatCount);
   // C2 addendum: fold event-derived anomaly flags (independent of the seat walk).
@@ -219,12 +270,20 @@ async function fetchSeatRows(bill: Address, snap: BillSnapshot): Promise<SeatRow
     try {
       // Loose-typed read path (artifact JSON is not const-inferred); avoids any.
       const loose = publicClient.readContract as unknown as (p: {
-        address: Address; abi: unknown; functionName: string; args: readonly unknown[];
+        address: Address;
+        abi: unknown;
+        functionName: string;
+        args: readonly unknown[];
       }) => Promise<unknown>;
       const s = await loose({
-        address: bill, abi: BillABI, functionName: 'seats', args: [BigInt(i)],
+        address: bill,
+        abi: BillABI,
+        functionName: "seats",
+        args: [BigInt(i)],
       });
-      const arr = Array.isArray(s) ? s : Object.values((s ?? {}) as Record<string, unknown>);
+      const arr = Array.isArray(s)
+        ? s
+        : Object.values((s ?? {}) as Record<string, unknown>);
       const wallet = String(arr[0]) as Address;
       const active = Boolean(arr[2]);
       if (!active) continue;
@@ -236,7 +295,9 @@ async function fetchSeatRows(bill: Address, snap: BillSnapshot): Promise<SeatRow
         postConfirmRotation: anomalies.has(i),
         verified: null,
       });
-    } catch { /* read failure on one seat never blanks the roster */ }
+    } catch {
+      /* read failure on one seat never blanks the roster */
+    }
   }
   // P0.3 badges: read-only grants view. indexed=true -> ungranted wallets are
   // explicitly "unverified"; feed absent -> every row stays neutral (null).
@@ -250,7 +311,11 @@ const Badge = ({ seat, mine }: { seat: SeatRow; mine: boolean }) => (
       {mine && <b className="ml-1">(me)</b>}
     </span>
     <span className="flex shrink-0 gap-1">
-      {seat.confirmed && <span className="rounded bg-sky-500/20 px-1.5 py-0.5 text-sky-600">✓ confirmed</span>}
+      {seat.confirmed && (
+        <span className="rounded bg-sky-500/20 px-1.5 py-0.5 text-sky-600">
+          ✓ confirmed
+        </span>
+      )}
       {/* P0.3: one World ID verification badge per seat (t_d1c1cf68). */}
       <SeatBadge status={flagToVerification(seat.verified)} />
       {/* C2 addendum (t_96389deb): post-confirm rotation anomaly chip, event-derived. */}
@@ -260,19 +325,21 @@ const Badge = ({ seat, mine }: { seat: SeatRow; mine: boolean }) => (
 );
 
 export const TandaBill = () => {
-  const [seatInput, setSeatInput] = useState('');
-  const [billInput, setBillInput] = useState('');
-  const [rotateInput, setRotateInput] = useState('');
-  const [state, setState] = useState<'idle' | 'pending' | 'success' | 'failed'>('idle');
-  const [actionLabel, setActionLabel] = useState('');
-  const [userOpHash, setUserOpHash] = useState('');
-  const [status, setStatus] = useState<string>('');
+  const [seatInput, setSeatInput] = useState("");
+  const [billInput, setBillInput] = useState("");
+  const [rotateInput, setRotateInput] = useState("");
+  const [state, setState] = useState<"idle" | "pending" | "success" | "failed">(
+    "idle",
+  );
+  const [actionLabel, setActionLabel] = useState("");
+  const [userOpHash, setUserOpHash] = useState("");
+  const [status, setStatus] = useState<string>("");
   const [billAddr, setBillAddr] = useState<Address | null>(null);
   const [snap, setSnap] = useState<BillSnapshot | null>(null);
   const [seats, setSeats] = useState<SeatRow[]>([]);
   const [nowSec, setNowSec] = useState(0);
-  const [expenseAmt, setExpenseAmt] = useState('');
-  const [fundAmt, setFundAmt] = useState('');
+  const [expenseAmt, setExpenseAmt] = useState("");
+  const [fundAmt, setFundAmt] = useState("");
   // fund = approve THEN fundEscrow; amount parked here between the two userOps.
   const pendingFund = useRef<bigint | null>(null);
   // P0.3 badge refresh: latest rows outside render + busy flag for the button.
@@ -280,12 +347,14 @@ export const TandaBill = () => {
   const [badgeBusy, setBadgeBusy] = useState(false);
 
   const session = useSession();
-  const myWallet = (session.data?.user as { walletAddress?: string } | undefined)
-    ?.walletAddress?.toLowerCase() as Address | undefined;
+  const myWallet = (
+    session.data?.user as { walletAddress?: string } | undefined
+  )?.walletAddress?.toLowerCase() as Address | undefined;
   const mySeat = seats.find((s) => s.wallet.toLowerCase() === myWallet);
 
   const { isLoading, isSuccess, isError } = useWaitForUserOperationReceipt({
-    client: publicClient, userOpHash,
+    client: publicClient,
+    userOpHash,
   });
 
   const refresh = async (bill: Address) => {
@@ -321,81 +390,98 @@ export const TandaBill = () => {
       // NOTE (arch leg): userOpHash != eth tx hash; BillCreated decode belongs in
       // a backend/indexer or via MiniKit wallet-auth receipt lookup — staged lane
       // reports confirmation only.
-      setState('success');
-      setStatus(`${actionLabel || 'createBill'} confirmed — refreshing chain state`);
-      setUserOpHash('');
-      if (actionLabel === 'approve' && pendingFund.current !== null && billAddr) {
+      setState("success");
+      setStatus(
+        `${actionLabel || "createBill"} confirmed — refreshing chain state`,
+      );
+      setUserOpHash("");
+      if (
+        actionLabel === "approve" &&
+        pendingFund.current !== null &&
+        billAddr
+      ) {
         const amt = pendingFund.current;
         pendingFund.current = null;
-        const a2 = billAction(billAddr, TANDA.factory, 'fundEscrow', [amt]);
-        void sendAction('fundEscrow', a2.to, a2.data);
+        const a2 = billAction(billAddr, TANDA.factory, "fundEscrow", [amt]);
+        void sendAction("fundEscrow", a2.to, a2.data);
       }
       if (billAddr) void refresh(billAddr);
     } else if (isError && userOpHash) {
-      setState('failed');
+      setState("failed");
       pendingFund.current = null;
-      setUserOpHash('');
+      setUserOpHash("");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isError, isSuccess]);
 
   const parseSeats = (): Address[] => {
     const seatsIn = seatInput.split(/[\s,]+/).filter(Boolean) as Address[];
-    if (!seatsIn.length || !seatsIn.every((s) => isAddress(s))) throw new Error('seats: comma-separated valid addresses required');
+    if (!seatsIn.length || !seatsIn.every((s) => isAddress(s)))
+      throw new Error("seats: comma-separated valid addresses required");
     return seatsIn;
   };
 
-  const sendAction = async (label: string, to: Address, data: `0x${string}`) => {
-    setState('pending');
+  const sendAction = async (
+    label: string,
+    to: Address,
+    data: `0x${string}`,
+  ) => {
+    setState("pending");
     setActionLabel(label);
-    setStatus('');
+    setStatus("");
     try {
       const result = await MiniKit.sendTransaction({
         chainId: TANDA.chainId,
         transactions: [{ to, data }],
       });
-      if (!result.data?.userOpHash) throw new Error('No userOpHash returned');
+      if (!result.data?.userOpHash) throw new Error("No userOpHash returned");
       setUserOpHash(result.data.userOpHash);
     } catch (err) {
       console.error(err);
-      setState('failed');
+      setState("failed");
       setStatus(`${label} failed: ${(err as Error).message.slice(0, 100)}`);
     }
   };
 
   const onClickCreateBill = async () => {
-    setStatus('');
-    setState('pending');
+    setStatus("");
+    setState("pending");
     try {
       const result = await MiniKit.sendTransaction({
         chainId: TANDA.chainId,
-        transactions: [{
-          to: TANDA.factory,
-          data: encodeFunctionData({
-            abi: FactoryABI, functionName: 'createBill',
-            // W6-V2 canonical token = USDC on this chain; seats = initial roster
-            // (factory passes it into initialize atomically — child onlyOwner trap).
-            args: [TANDA.usdcSepolia as Address, parseSeats()],
-          }),
-        }],
+        transactions: [
+          {
+            to: TANDA.factory,
+            data: encodeFunctionData({
+              abi: FactoryABI,
+              functionName: "createBill",
+              // W6-V2 canonical token = USDC on this chain; seats = initial roster
+              // (factory passes it into initialize atomically — child onlyOwner trap).
+              args: [TANDA.usdcSepolia as Address, parseSeats()],
+            }),
+          },
+        ],
       });
-      if (!result.data?.userOpHash) throw new Error('No userOpHash returned');
+      if (!result.data?.userOpHash) throw new Error("No userOpHash returned");
       setUserOpHash(result.data.userOpHash);
     } catch (err) {
       console.error(err);
-      setState('failed');
+      setState("failed");
     }
   };
 
   const onClickProbeBill = async () => {
-    if (!isAddress(billInput)) { setStatus('invalid bill address'); return; }
-    setStatus('probing…');
+    if (!isAddress(billInput)) {
+      setStatus("invalid bill address");
+      return;
+    }
+    setStatus("probing…");
     try {
       const p = await refresh(billInput as Address);
       setBillAddr(billInput as Address);
       setStatus(
         `era=${p.era} token=${p.token} window=${p.window}s maxHold=${p.maxHold}s ` +
-        `escrow=${p.escrow} seats=${p.seatCount} | ${p.lastSettlement}`,
+          `escrow=${p.escrow} seats=${p.seatCount} | ${p.lastSettlement}`,
       );
     } catch (e) {
       setStatus(`probe failed: ${(e as Error).message.slice(0, 120)}`);
@@ -403,16 +489,23 @@ export const TandaBill = () => {
   };
 
   // --- W10 action gates (mirrors frozen contract semantics; contract is truth) ---
-  const forwarderEra = snap !== null && snap.era === 'factory-w10';
+  const forwarderEra = snap !== null && snap.era === "factory-w10";
   const initiated = snap !== null && snap.initiatedAt > BigInt(0);
-  const executable = snap !== null && forwarderEra &&
-    snap.fullyConfirmedAt > BigInt(0) && snap.settledAt === BigInt(0) &&
+  const executable =
+    snap !== null &&
+    forwarderEra &&
+    snap.fullyConfirmedAt > BigInt(0) &&
+    snap.settledAt === BigInt(0) &&
     nowSec >= Number(snap.fullyConfirmedAt + snap.window);
   const mineConfirmed = mySeat ? mySeat.confirmed : false;
   // Split-lock HINT only (C6/C7 enforced on-chain): self-rotation of a seat that
   // already confirmed while a settlement is in flight reverts until it resolves.
-  const rotateLocked = snap !== null && mineConfirmed && initiated &&
-    snap.settledAt === BigInt(0) && !snap.refunded &&
+  const rotateLocked =
+    snap !== null &&
+    mineConfirmed &&
+    initiated &&
+    snap.settledAt === BigInt(0) &&
+    !snap.refunded &&
     nowSec < Number(snap.initiatedAt + snap.maxHold);
 
   // P1.1b render lane (t_p11b_nudge_render): derive the nudge landing state
@@ -426,26 +519,56 @@ export const TandaBill = () => {
     snap.escrow > BigInt(0)
       ? formatUnits(snap.escrow, 6).replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '')
       : undefined;
+  // P1.4b: settlement payout vector (factory era only — legacy never populates
+  // settlementTotal/expectedMask, so it stays null there). A build throw means
+  // inputs cannot be explained faithfully -> render nothing, never a partial
+  // table (contract-builder doctrine). rotationAnomaly omitted: the UI has no
+  // SeatWalletRotated event feed; anomaly sentences arrive with that lane.
+  let settlementVector: SettlementVector | null = null;
+  if (initiated && snap !== null && snap.settlementTotal > BigInt(0)) {
+    try {
+      settlementVector = buildSettlementVector({
+        settlementId: BigInt(0),
+        totalAmount: snap.settlementTotal,
+        expectedMask: snap.expectedMask,
+        seats: seats.map((s) => ({ seatId: s.seatId, wallet: s.wallet })),
+      });
+    } catch {
+      /* unfaithful inputs — omit the vector table */
+    }
+  }
 
   const doConfirm = () => {
     if (!billAddr) return;
-    const a = billAction(billAddr, TANDA.factory, 'confirmSettlement', [BigInt(0)]);
-    void sendAction('confirmSettlement', a.to, a.data);
+    const a = billAction(billAddr, TANDA.factory, "confirmSettlement", [
+      BigInt(0),
+    ]);
+    void sendAction("confirmSettlement", a.to, a.data);
   };
   const doExecute = () => {
     if (!billAddr) return;
-    const a = billAction(billAddr, TANDA.factory, 'executeSettlement', [BigInt(0)]);
-    void sendAction('executeSettlement', a.to, a.data);
+    const a = billAction(billAddr, TANDA.factory, "executeSettlement", [
+      BigInt(0),
+    ]);
+    void sendAction("executeSettlement", a.to, a.data);
   };
   const doRotate = () => {
-    if (!billAddr || !mySeat || !isAddress(rotateInput)) { setStatus('rotate: your seat + a valid new wallet required'); return; }
-    const a = billAction(billAddr, TANDA.factory, 'rotateSeatWallet', [BigInt(mySeat.seatId), rotateInput as Address]);
-    void sendAction('rotateSeatWallet', a.to, a.data);
+    if (!billAddr || !mySeat || !isAddress(rotateInput)) {
+      setStatus("rotate: your seat + a valid new wallet required");
+      return;
+    }
+    const a = billAction(billAddr, TANDA.factory, "rotateSeatWallet", [
+      BigInt(mySeat.seatId),
+      rotateInput as Address,
+    ]);
+    void sendAction("rotateSeatWallet", a.to, a.data);
   };
 
   // --- Owner console (frozen V2 semantics; every write through billAction,
   //     the ONE sanctioned approve path is usdcApprove: to=USDC, spender=clone) ---
-  const isOwner = snap !== null && myWallet !== undefined &&
+  const isOwner =
+    snap !== null &&
+    myWallet !== undefined &&
     snap.owner.toLowerCase() === myWallet.toLowerCase();
   const parseAmt = (s: string): bigint | null => {
     try {
@@ -453,32 +576,42 @@ export const TandaBill = () => {
       // decimals probe on the write path — amount intent is owner-typed).
       const v = parseUnits(s.trim(), 6);
       return v > BigInt(0) ? v : null;
-    } catch { return null; }
+    } catch {
+      return null;
+    }
   };
   const doAddExpense = () => {
     if (!billAddr) return;
     const amt = parseAmt(expenseAmt);
-    if (amt === null) { setStatus('expense: positive USDC amount required'); return; }
-    const a = billAction(billAddr, TANDA.factory, 'addExpense', [amt]);
-    void sendAction('addExpense', a.to, a.data);
+    if (amt === null) {
+      setStatus("expense: positive USDC amount required");
+      return;
+    }
+    const a = billAction(billAddr, TANDA.factory, "addExpense", [amt]);
+    void sendAction("addExpense", a.to, a.data);
   };
   const doFund = () => {
     if (!billAddr) return;
     const amt = parseAmt(fundAmt);
-    if (amt === null) { setStatus('fund: positive USDC amount required'); return; }
+    if (amt === null) {
+      setStatus("fund: positive USDC amount required");
+      return;
+    }
     pendingFund.current = amt;
     const ap = usdcApprove(TANDA.usdcSepolia, billAddr, amt);
-    void sendAction('approve', ap.to, ap.data);
+    void sendAction("approve", ap.to, ap.data);
   };
   const doInitiate = () => {
     if (!billAddr) return;
-    const a = billAction(billAddr, TANDA.factory, 'initiateSettlement', []);
-    void sendAction('initiateSettlement', a.to, a.data);
+    const a = billAction(billAddr, TANDA.factory, "initiateSettlement", []);
+    void sendAction("initiateSettlement", a.to, a.data);
   };
   const doRefund = () => {
     if (!billAddr) return;
-    const a = billAction(billAddr, TANDA.factory, 'refundSettlement', [BigInt(0)]);
-    void sendAction('refundSettlement', a.to, a.data);
+    const a = billAction(billAddr, TANDA.factory, "refundSettlement", [
+      BigInt(0),
+    ]);
+    void sendAction("refundSettlement", a.to, a.data);
   };
 
   const verifiedCount = seats.filter((s) => s.verified === true).length;
@@ -488,7 +621,9 @@ export const TandaBill = () => {
 
   return (
     <div className="grid w-full gap-4 rounded-xl border p-4">
-      <p className="text-lg font-semibold">Tanda Bill (W8 shell — chain {TANDA.chainId})</p>
+      <p className="text-lg font-semibold">
+        Tanda Bill (W8 shell — chain {TANDA.chainId})
+      </p>
       <p className="text-xs opacity-70">
         Funded means funded. USDC sits in escrow from day one. When everyone
         confirms, money moves — nobody can ghost your payout.
@@ -501,14 +636,19 @@ export const TandaBill = () => {
       />
       <LiveFeedback
         label={{
-          failed: 'Transaction failed',
-          pending: 'Transaction pending',
-          success: 'UserOp confirmed on-chain',
+          failed: "Transaction failed",
+          pending: "Transaction pending",
+          success: "UserOp confirmed on-chain",
         }}
-        state={state === 'idle' ? undefined : state}
+        state={state === "idle" ? undefined : state}
         className="w-full"
       >
-        <Button onClick={onClickCreateBill} disabled={state === 'pending'} size="lg" className="w-full">
+        <Button
+          onClick={onClickCreateBill}
+          disabled={state === "pending"}
+          size="lg"
+          className="w-full"
+        >
           Start a guaranteed bill
         </Button>
       </LiveFeedback>
@@ -518,45 +658,71 @@ export const TandaBill = () => {
         value={billInput}
         onChange={(e) => setBillInput(e.target.value)}
       />
-      <Button onClick={onClickProbeBill} variant="secondary">Probe Bill (era + roster)</Button>
+      <Button onClick={onClickProbeBill} variant="secondary">
+        Probe Bill (era + roster)
+      </Button>
       {status && <p className="break-all text-xs opacity-70">{status}</p>}
-      {isLoading && <p className="text-xs opacity-60">waiting for userOp receipt…</p>}
+      {isLoading && (
+        <p className="text-xs opacity-60">waiting for userOp receipt…</p>
+      )}
 
-      {snap && snap.era !== 'unknown' && billAddr && (
+      {snap && snap.era !== "unknown" && billAddr && (
         <div className="grid gap-2 border-t pt-3">
           <div className="flex items-center justify-between gap-2">
             <p className="text-xs font-semibold opacity-80">
-              Roster — {verifiedCount} World ID verified · {unverifiedCount} unverified
-              {unknownCount > 0 ? ` · ${unknownCount} unknown` : ''}
-              {' '}· {confirmedCount}/{seats.length} confirmed
+              Roster — {verifiedCount} World ID verified · {unverifiedCount}{" "}
+              unverified
+              {unknownCount > 0 ? ` · ${unknownCount} unknown` : ""} ·{" "}
+              {confirmedCount}/{seats.length} confirmed
             </p>
-            <Button onClick={() => void doRefreshBadges()} variant="tertiary" size="sm"
-              disabled={badgeBusy}>
-              {badgeBusy ? 'Refreshing badges…' : 'Refresh badges'}
+            <Button
+              onClick={() => void doRefreshBadges()}
+              variant="tertiary"
+              size="sm"
+              disabled={badgeBusy}
+            >
+              {badgeBusy ? "Refreshing badges…" : "Refresh badges"}
             </Button>
           </div>
           <div className="grid gap-1">
             {seats.map((s) => (
-              <Badge key={s.seatId} seat={s} mine={s.wallet.toLowerCase() === myWallet} />
+              <Badge
+                key={s.seatId}
+                seat={s}
+                mine={s.wallet.toLowerCase() === myWallet}
+              />
             ))}
           </div>
 
           {/* P1.1b: the cadence-nudge landing state the push promised. */}
           {nudge !== null && <NudgeCountdown status={nudge} usdc={escrowUSDC} />}
+          {settlementVector && (
+            <SettlementVectorTable vector={settlementVector} />
+          )}
 
           {forwarderEra && initiated && mySeat && !mineConfirmed && (
             <div className="grid gap-1">
               <p className="text-xs opacity-70">
-                Your share is already in the contract. Confirming just says
-                yes — it can&apos;t be un-funded.
+                Your share is already in the contract. Confirming just says yes
+                — it can&apos;t be un-funded.
               </p>
-              <Button onClick={doConfirm} variant="secondary" size="sm" disabled={state === 'pending'}>
+              <Button
+                onClick={doConfirm}
+                variant="secondary"
+                size="sm"
+                disabled={state === "pending"}
+              >
                 Confirm my seat
               </Button>
             </div>
           )}
           {executable && (
-            <Button onClick={doExecute} variant="secondary" size="sm" disabled={state === 'pending'}>
+            <Button
+              onClick={doExecute}
+              variant="secondary"
+              size="sm"
+              disabled={state === "pending"}
+            >
               Settle now (permissionless)
             </Button>
           )}
@@ -568,9 +734,17 @@ export const TandaBill = () => {
                 value={rotateInput}
                 onChange={(e) => setRotateInput(e.target.value)}
               />
-              <Button onClick={doRotate} variant="secondary" size="sm"
-                disabled={state === 'pending' || rotateLocked || !isAddress(rotateInput)}>
-                {rotateLocked ? 'Rotation locked (settlement in flight)' : 'Rotate my wallet'}
+              <Button
+                onClick={doRotate}
+                variant="secondary"
+                size="sm"
+                disabled={
+                  state === "pending" || rotateLocked || !isAddress(rotateInput)
+                }
+              >
+                {rotateLocked
+                  ? "Rotation locked (settlement in flight)"
+                  : "Rotate my wallet"}
               </Button>
             </div>
           )}
@@ -578,36 +752,72 @@ export const TandaBill = () => {
             <div className="grid gap-1 border-t border-dashed pt-2">
               <p className="text-xs font-semibold opacity-70">Owner console</p>
               <div className="flex gap-1">
-                <input className="w-full rounded border p-2 text-xs" placeholder="expense USDC (e.g. 12.50)"
-                  value={expenseAmt} onChange={(e) => setExpenseAmt(e.target.value)} />
-                <Button onClick={doAddExpense} variant="secondary" size="sm"
-                  disabled={state === 'pending' || (initiated && snap !== null && snap.settledAt === BigInt(0) && !snap.refunded)}>
+                <input
+                  className="w-full rounded border p-2 text-xs"
+                  placeholder="expense USDC (e.g. 12.50)"
+                  value={expenseAmt}
+                  onChange={(e) => setExpenseAmt(e.target.value)}
+                />
+                <Button
+                  onClick={doAddExpense}
+                  variant="secondary"
+                  size="sm"
+                  disabled={
+                    state === "pending" ||
+                    (initiated &&
+                      snap !== null &&
+                      snap.settledAt === BigInt(0) &&
+                      !snap.refunded)
+                  }
+                >
                   Add expense
                 </Button>
               </div>
               <div className="flex gap-1">
-                <input className="w-full rounded border p-2 text-xs" placeholder="fund USDC (approve → escrow)"
-                  value={fundAmt} onChange={(e) => setFundAmt(e.target.value)} />
-                <Button onClick={doFund} variant="secondary" size="sm"
-                  disabled={state === 'pending' || parseAmt(fundAmt) === null}>
+                <input
+                  className="w-full rounded border p-2 text-xs"
+                  placeholder="fund USDC (approve → escrow)"
+                  value={fundAmt}
+                  onChange={(e) => setFundAmt(e.target.value)}
+                />
+                <Button
+                  onClick={doFund}
+                  variant="secondary"
+                  size="sm"
+                  disabled={state === "pending" || parseAmt(fundAmt) === null}
+                >
                   Fund escrow
                 </Button>
               </div>
               {snap.escrow > BigInt(0) && (
                 <p className="text-xs opacity-70">
-                  Escrow locked — the math is done, the money&apos;s already here.
+                  Escrow locked — the math is done, the money&apos;s already
+                  here.
                 </p>
               )}
               {!initiated && (
-                <Button onClick={doInitiate} variant="secondary" size="sm" disabled={state === 'pending'}>
+                <Button
+                  onClick={doInitiate}
+                  variant="secondary"
+                  size="sm"
+                  disabled={state === "pending"}
+                >
                   Initiate settlement
                 </Button>
               )}
-              {initiated && snap !== null && snap.settledAt === BigInt(0) && !snap.refunded && (
-                <Button onClick={doRefund} variant="tertiary" size="sm" disabled={state === 'pending'}>
-                  Refund settlement (bounded escape)
-                </Button>
-              )}
+              {initiated &&
+                snap !== null &&
+                snap.settledAt === BigInt(0) &&
+                !snap.refunded && (
+                  <Button
+                    onClick={doRefund}
+                    variant="tertiary"
+                    size="sm"
+                    disabled={state === "pending"}
+                  >
+                    Refund settlement (bounded escape)
+                  </Button>
+                )}
             </div>
           )}
           {snap.settledAt > BigInt(0) && (
@@ -615,12 +825,13 @@ export const TandaBill = () => {
               Settled on-chain. No IOUs, no reminders needed, no begging.
             </p>
           )}
-          {snap.era === 'legacy' && (
+          {snap.era === "legacy" && (
             <p className="text-xs opacity-60">
-              Legacy W5 clone — runtime-locked; read-only here (no forwarder, no rotation).
+              Legacy W5 clone — runtime-locked; read-only here (no forwarder, no
+              rotation).
             </p>
           )}
-          {snap.era === 'factory-v2' && (
+          {snap.era === "factory-v2" && (
             <p className="text-xs opacity-60">
               Pre-forwarder V2 clone — rotation unavailable on this lineage.
             </p>
