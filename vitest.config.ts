@@ -13,5 +13,9 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['src/**/*.test.{ts,tsx}'],
+    // settlementVector.test.ts is a node:test suite (Node 26 strips TS types
+    // natively); vitest would report it as an empty suite. Run it directly:
+    //   node --test src/lib/__tests__/settlementVector.test.ts
+    exclude: ['src/lib/__tests__/settlementVector.test.ts'],
   },
 });
