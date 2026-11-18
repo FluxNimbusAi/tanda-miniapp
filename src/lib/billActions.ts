@@ -62,6 +62,10 @@ export type SeatRow = {
   active: boolean;
   confirmed: boolean;
   verified: boolean | null; // null = not in seat_grants index yet
+  // C2 ruling addendum (t_96389deb): SeatWalletRotated observed after
+  // fullyConfirmedAt while the seat is in confirmedMask. Event-derived
+  // visibility flag; absent/false = no anomaly (neutral chip).
+  postConfirmRotation?: boolean;
 };
 
 /** confirmedMask bit for a seat index — BigInt() form (template target < ES2020). */

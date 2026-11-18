@@ -17,7 +17,7 @@
 import FactoryABI from '@/abi/TandaBillFactory.json';
 import BillABI from '@/abi/TandaBillV2.json';
 import BillV1ABI from '@/abi/TandaBillV1.json';
-import { SeatBadge } from '@/components/SeatBadge';
+import { PostConfirmRotationFlag, SeatBadge } from '@/components/SeatBadge';
 import { TANDA } from '@/config/tanda';
 import { billAction, maskBit, usdcApprove, type SeatRow } from '@/lib/billActions';
 import {
@@ -26,6 +26,7 @@ import {
   verificationToFlag,
   type SeatGrantsFeed,
 } from '@/lib/seatVerification';
+import { computePostConfirmRotations, type RotationEventLite } from '@/lib/rotationAnomaly';
 import { Button, LiveFeedback } from '@worldcoin/mini-apps-ui-kit-react';
 import { MiniKit } from '@worldcoin/minikit-js';
 import { useWaitForUserOperationReceipt } from '@worldcoin/minikit-react';
@@ -169,12 +170,48 @@ async function loadBadges(bill: Address, rows: SeatRow[]): Promise<SeatRow[]> {
   }
 }
 
+/** C2 ruling addendum (t_96389deb, Option A): SeatWalletRotated logs folded
+ *  through the pure resolver -> seat ids rotated AFTER full confirmation while
+ *  in confirmedMask. Event-derived ONLY (ordering fact, zero state mutation).
+ *  Any feed failure -> empty set: neutral chips, roster never blanks. */
+async function loadAnomalyFlags(bill: Address, snap: BillSnapshot): Promise<Set<number>> {
+  if (snap.era === 'unknown' || snap.era === 'legacy') return new Set();
+  if (snap.fullyConfirmedAt <= BigInt(0)) return new Set();
+  try {
+    // Loose-typed log path mirrors the readContract discipline (artifact JSON
+    // is not const-inferred); avoids any.
+    const getLogsLoose = publicClient.getLogs as unknown as (q: {
+      address: Address; abi: unknown; eventName: string; fromBlock: bigint;
+    }) => Promise<{ args?: unknown; blockNumber: bigint | null }[]>;
+    const logs = await getLogsLoose({
+      address: bill, abi: BillABI, eventName: 'SeatWalletRotated', fromBlock: BigInt(0),
+    });
+    const events: RotationEventLite[] = [];
+    for (const log of logs) {
+      const raw = (log.args as { seatId?: unknown } | undefined)?.seatId;
+      const seatId = typeof raw === 'bigint' || typeof raw === 'number' ? Number(raw) : -1;
+      if (log.blockNumber === null) continue;
+      const blk = await publicClient.getBlock({ blockNumber: log.blockNumber });
+      events.push({ seatId, blockTimestamp: Number(blk.timestamp) });
+    }
+    return computePostConfirmRotations(events, {
+      confirmedMask: snap.confirmedMask,
+      fullyConfirmedAt: snap.fullyConfirmedAt,
+    });
+  } catch {
+    /* event feed down: no flags, roster stays live */
+    return new Set();
+  }
+}
+
 /** Active seat roster via seats(i) walk (swap-pop removal keeps indices dense;
  *  seatIdOf maps wallet -> index; confirmed bit from settlement mask). */
 async function fetchSeatRows(bill: Address, snap: BillSnapshot): Promise<SeatRow[]> {
   if (snap.era === 'unknown' || snap.era === 'legacy') return [];
   const rows: SeatRow[] = [];
   const count = Number(snap.seatCount);
+  // C2 addendum: fold event-derived anomaly flags (independent of the seat walk).
+  const anomalies = await loadAnomalyFlags(bill, snap);
   for (let i = 0; i < count && i < 64; i++) {
     try {
       // Loose-typed read path (artifact JSON is not const-inferred); avoids any.
@@ -193,6 +230,7 @@ async function fetchSeatRows(bill: Address, snap: BillSnapshot): Promise<SeatRow
         wallet,
         active: true,
         confirmed: maskBit(snap.confirmedMask, i),
+        postConfirmRotation: anomalies.has(i),
         verified: null,
       });
     } catch { /* read failure on one seat never blanks the roster */ }
@@ -212,6 +250,8 @@ const Badge = ({ seat, mine }: { seat: SeatRow; mine: boolean }) => (
       {seat.confirmed && <span className="rounded bg-sky-500/20 px-1.5 py-0.5 text-sky-600">✓ confirmed</span>}
       {/* P0.3: one World ID verification badge per seat (t_d1c1cf68). */}
       <SeatBadge status={flagToVerification(seat.verified)} />
+      {/* C2 addendum (t_96389deb): post-confirm rotation anomaly chip, event-derived. */}
+      {seat.postConfirmRotation && <PostConfirmRotationFlag />}
     </span>
   </span>
 );
