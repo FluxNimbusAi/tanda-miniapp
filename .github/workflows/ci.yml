@@ -7,11 +7,12 @@ name: CI
 # - No prettier gate yet: main carries a pre-existing format backlog from
 #   the upstream template; a repo-wide reformat would collide with open
 #   branches. Tracked separately.
-# - Unit tests: `node --test` with native TS type-stripping (Node 26,
-#   matching the dev lane). Until the P1.4a settlement-vector suite
-#   merges, there are no *.test.ts files on main; the step reports that
-#   honestly instead of pretending to run tests, and executes the suite
-#   automatically once it lands.
+# - Unit tests: vitest suite (P0.3 seat-badge lane, t_44ae186c) —
+#   `npm test` runs resolver + SeatBadge render + /api/seat-grants
+#   SQLite integration (35 cases). Suites authored with node:test
+#   (e.g. P1.4a settlement-vector) must be ported to vitest or added
+#   as an explicit step; a bare `node --test` glob no longer covers
+#   the repo's test story.
 # - next build runs with no env: all World/Minikit env reads are
 #   request-time, verified locally 2026-11-17.
 
@@ -38,13 +39,8 @@ jobs:
       - name: Typecheck
         run: npx tsc --noEmit
 
-      - name: Unit tests (guarded)
-        run: |
-          if compgen -G "src/lib/__tests__/*.test.ts" > /dev/null; then
-            node --test src/lib/__tests__/
-          else
-            echo "No unit-test suite on this ref yet — P1.4a adds settlementVector tests; this step will run them automatically once merged."
-          fi
+      - name: Unit tests
+        run: npm test
 
       - name: Production build
         run: npm run build
