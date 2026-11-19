@@ -1,19 +1,11 @@
-import { Page } from '@/components/PageLayout';
-import { AuthButton } from '../components/AuthButton';
+import { ModeGate } from '@/components/ModeGate';
 
+// W2.5-3 (t_14b21fee): route-level dual mode. MiniKit.isInstalled() -> full
+// World App experience (hero + wallet auth); plain browser -> Read-Only Live
+// Explorer over the :8096 indexer (PR #22 settlements + bill lifecycle
+// readback). Gate is a client decision on isInstalled; SSR/unknown defaults
+// to the Explorer so GitHub visitors see PRODUCT first, never the
+// Open-in-World-App wall. Reversible: one PR, no env/deploy surface.
 export default function Home() {
-  return (
-    <Page>
-      <Page.Main className="flex flex-col items-center justify-center gap-8 px-6 text-center">
-        <div className="grid gap-2">
-          <h1 className="text-2xl font-semibold">Funded means funded.</h1>
-          <p className="text-sm opacity-70">
-            USDC sits in escrow from day one. When everyone confirms, money
-            moves — nobody can ghost your payout.
-          </p>
-        </div>
-        <AuthButton />
-      </Page.Main>
-    </Page>
-  );
+  return <ModeGate />;
 }

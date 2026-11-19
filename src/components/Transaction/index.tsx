@@ -9,12 +9,20 @@ import { useEffect, useRef, useState } from 'react';
 import { encodeFunctionData } from 'viem';
 
 /**
- * This component is used to get a token from a contract
- * For this to work you need to add the contract address to contract entrypoints
- * inside of  Dev Portal > Configuration > Advanced
- * The general design pattern here is
+ * W26-FIX (CoS dual-preservation ruling, PR #26): this file SURVIVES the
+ * OPP-001 purge. Deleting it wholesale (fold head 01062e2) would revert the
+ * landed #28 useUserOpStatus wiring — re-introducing the eternal-pending
+ * defect (OPP-003 dead-end #1) — so the lifecycle import + hook state below
+ * are byte-pinned against main and the templateResidue golden now PINS that
+ * fact instead of asserting deletion. The demo USDC transfer lane to the
+ * template's demo recipient IS purged (store-review residue). The component
+ * is not
+ * rendered by any shipped page: home is the product lane only (TandaBill),
+ * landing is the dual-mode ModeGate -> LiveExplorer gate.
+ *
+ * Design pattern (unchanged, W2.5-5):
  * 1. Trigger the transaction
- * 2. Track the userOp through the golden path (W2.5-5): pending -> mined.
+ * 2. Track the userOp through the golden path: pending -> mined.
  *    This demo has no :8096 indexer lane, so `mined` IS the honest terminal
  *    (indexedNa) — never a faked "indexed" tick.
  * 3. Handle success/failure — failures NAME the stuck stage + retry control
@@ -25,9 +33,6 @@ export const Transaction = () => {
   const [buttonState, setButtonState] = useState<
     'pending' | 'success' | 'failed' | undefined
   >(undefined);
-  const [whichButton, setWhichButton] = useState<'getToken' | 'transferToken'>(
-    'getToken',
-  );
   // W2.5-5 — same class as TandaBill: ONE lifecycle machine (the pure
   // golden path in @/lib/userOpStatus), indexStatusPath null opts the
   // indexed stage out because demo-contract txs have nothing to index.
@@ -44,7 +49,6 @@ export const Transaction = () => {
 
   // This is a basic transaction call to mint a token
   const onClickGetToken = async () => {
-    setWhichButton('getToken');
     setButtonState('pending');
 
     try {
@@ -79,45 +83,6 @@ export const Transaction = () => {
     }
   };
 
-  // This is a basic ERC20 transfer using the token you minted
-  // Make sure to call Mint Token first
-  const onClickTransferToken = async () => {
-    setWhichButton('transferToken');
-    setButtonState('pending');
-    const recipient = (await MiniKit.getUserByUsername('alex')).walletAddress;
-    const transferAmount = '500000000000000000';
-
-    try {
-      const result = await MiniKit.sendTransaction({
-        chainId: 480,
-        transactions: [
-          {
-            to: myContractToken,
-            data: encodeFunctionData({
-              abi: TestContractABI,
-              functionName: 'transfer',
-              args: [recipient, transferAmount],
-            }),
-          },
-        ],
-      });
-
-      console.log(
-        'Transaction submitted, waiting for confirmation:',
-        result.data.userOpHash,
-      );
-
-      if (!result.data.userOpHash) {
-        throw new Error('No userOpHash returned');
-      }
-
-      lifecycle.track(result.data.userOpHash);
-    } catch (err) {
-      console.error('Error:', err);
-      setButtonState('failed');
-      setTimeout(() => setButtonState(undefined), 3000);
-    }
-  };
 
   return (
     <div className="grid w-full gap-4">
@@ -128,7 +93,7 @@ export const Transaction = () => {
           pending: 'Transaction pending',
           success: 'Transaction successful',
         }}
-        state={whichButton === 'getToken' ? buttonState : undefined}
+        state={buttonState}
         className="w-full"
       >
         <Button
@@ -139,25 +104,6 @@ export const Transaction = () => {
           className="w-full"
         >
           Get Token
-        </Button>
-      </LiveFeedback>
-      <LiveFeedback
-        label={{
-          failed: 'Transaction failed',
-          pending: 'Transaction pending',
-          success: 'Transaction successful',
-        }}
-        state={whichButton === 'transferToken' ? buttonState : undefined}
-        className="w-full"
-      >
-        <Button
-          onClick={onClickTransferToken}
-          disabled={lifecycle.isTracking}
-          size="lg"
-          variant="tertiary"
-          className="w-full"
-        >
-          Transfer Token
         </Button>
       </LiveFeedback>
       {/* W2.5-5 — stage visibility + named-stage retry, same class as
