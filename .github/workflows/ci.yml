@@ -42,5 +42,8 @@ jobs:
       - name: Unit tests
         run: npm test
 
+      - name: P-A lifecycle e2e (golden path vs mock relayer + indexer)
+        run: node e2e/lifecycle_leg.mts --mock
+
       - name: Production build
         run: npm run build
