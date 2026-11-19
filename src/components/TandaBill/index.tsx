@@ -20,6 +20,12 @@ import BillV1ABI from "@/abi/TandaBillV1.json";
 import { PostConfirmRotationFlag, SeatBadge } from "@/components/SeatBadge";
 import { Verify } from "@/components/Verify";
 import { SEAT_JOIN_ACTION } from "@/lib/seatJoin";
+import { InvitePanel } from "@/components/InvitePanel";
+import {
+  lookupUsernamesForWallets,
+  parseSeatTokens,
+  resolveWalletsForHandles,
+} from "@/lib/worldUsernames";
 import { SettlementVectorTable } from "@/components/SettlementVector";
 import { NudgeCountdown } from "@/components/NudgeCountdown";
 import { nudgeStatus } from "@/lib/nudgeStatus";
@@ -304,13 +310,30 @@ async function fetchSeatRows(
   }
   // P0.3 badges: read-only grants view. indexed=true -> ungranted wallets are
   // explicitly "unverified"; feed absent -> every row stays neutral (null).
-  return loadBadges(bill, rows);
+  // W2.5-4: fold @handle chips from the read-only World username service
+  // (usernames.worldcoin.org, GET-only per charter). Fail-soft exactly like
+  // loadBadges: any resolution error leaves rows as the chain produced them.
+  let rowsWithHandles = rows;
+  try {
+    const byWallet = await lookupUsernamesForWallets(
+      rows.map((r) => r.wallet),
+    );
+    rowsWithHandles = rows.map((r) => {
+      const rec = byWallet.get(r.wallet.toLowerCase());
+      return rec ? { ...r, username: rec.username } : r;
+    });
+  } catch {
+    /* username service down: wallets-only chips, roster stays live */
+  }
+  return loadBadges(bill, rowsWithHandles);
 }
 
 const Badge = ({ seat, mine }: { seat: SeatRow; mine: boolean }) => (
   <span className="flex items-center justify-between gap-2 rounded border px-2 py-1 text-xs">
     <span className="break-all">
-      #{seat.seatId} {`${seat.wallet.slice(0, 6)}…${seat.wallet.slice(-4)}`}
+      #{seat.seatId}{" "}
+      {seat.username ? `@${seat.username} · ` : ""}
+      {`${seat.wallet.slice(0, 6)}…${seat.wallet.slice(-4)}`}
       {mine && <b className="ml-1">(me)</b>}
     </span>
     <span className="flex shrink-0 gap-1">
@@ -327,7 +350,12 @@ const Badge = ({ seat, mine }: { seat: SeatRow; mine: boolean }) => (
   </span>
 );
 
-export const TandaBill = () => {
+export const TandaBill = ({
+  // W2.5-4 (t_edd4a5e9): invite deep-link pre-probe. The /bill/{address}
+  // landing route mounts the SAME shell and auto-probes the bill read-only;
+  // home omits the prop and behaves exactly as before.
+  initialBill,
+}: { initialBill?: Address } = {}) => {
   const [seatInput, setSeatInput] = useState("");
   const [billInput, setBillInput] = useState("");
   const [rotateInput, setRotateInput] = useState("");
@@ -387,6 +415,26 @@ export const TandaBill = () => {
     }
   };
 
+  const didDeepLink = useRef(false);
+  useEffect(() => {
+    // W2.5-4: invite-landing auto-probe. Single-shot (StrictMode-safe),
+    // read-only lane — every write still requires the normal in-app gates.
+    if (!initialBill || didDeepLink.current) return;
+    didDeepLink.current = true;
+    setBillAddr(initialBill);
+    void (async () => {
+      setStatus("probing invited bill…");
+      try {
+        await refresh(initialBill);
+        setStatus("");
+      } catch (e) {
+        setStatus(
+          `invite bill probe failed: ${(e as Error).message.slice(0, 120)}`,
+        );
+      }
+    })();
+  }, [initialBill]);
+
   // W2.5-5 — lifecycle terminal handler: applies each completed op EXACTLY
   // once (handledSeqRef gates on snapshot.seq so retry() re-applies only when
   // the re-run NEWLY terminates). Failure text always NAMES the stuck stage
@@ -425,11 +473,28 @@ export const TandaBill = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lifecycle.snapshot]);
 
-  const parseSeats = (): Address[] => {
-    const seatsIn = seatInput.split(/[\s,]+/).filter(Boolean) as Address[];
-    if (!seatsIn.length || !seatsIn.every((s) => isAddress(s)))
-      throw new Error("seats: comma-separated valid addresses required");
-    return seatsIn;
+  // W2.5-4: seats may be 0x addresses OR @handles (World usernames). Handles
+  // resolve through the read-only username service into checksummed wallets
+  // BEFORE the createBill userOp is built — the contract still only ever
+  // receives valid addresses; the state machine is untouched.
+  const resolveSeats = async (): Promise<Address[]> => {
+    const { addresses, handles, invalid } = parseSeatTokens(seatInput);
+    if (invalid.length)
+      throw new Error(
+        `seats: unrecognized token(s): ${invalid.slice(0, 3).join(", ")}`,
+      );
+    if (!handles.length) {
+      if (!addresses.length)
+        throw new Error("seats: at least one address or @handle required");
+      return addresses;
+    }
+    const byHandle = await resolveWalletsForHandles(handles);
+    const missing = handles.filter((h) => !byHandle.has(h));
+    if (missing.length)
+      throw new Error(
+        `seats: no World username for @${missing.slice(0, 3).join(", @")}`,
+      );
+    return [...addresses, ...handles.map((h) => byHandle.get(h)!.address)];
   };
 
   const sendAction = async (
@@ -464,6 +529,16 @@ export const TandaBill = () => {
   const onClickCreateBill = async () => {
     setStatus("");
     setState("pending");
+    // W2.5-4: resolve @handles -> wallets first; a bad token aborts BEFORE
+    // any userOp is built (no wasted signature prompt, no on-chain revert).
+    let seatsList: Address[];
+    try {
+      seatsList = await resolveSeats();
+    } catch (err) {
+      setState("idle");
+      setStatus((err as Error).message.slice(0, 160));
+      return;
+    }
     try {
       const result = await MiniKit.sendTransaction({
         chainId: TANDA.chainId,
@@ -475,7 +550,7 @@ export const TandaBill = () => {
               functionName: "createBill",
               // W6-V2 canonical token = USDC on this chain; seats = initial roster
               // (factory passes it into initialize atomically — child onlyOwner trap).
-              args: [TANDA.usdcSepolia as Address, parseSeats()],
+              args: [TANDA.usdcSepolia as Address, seatsList],
             }),
           },
         ],
@@ -744,6 +819,16 @@ export const TandaBill = () => {
               onVerified={() => void doRefreshBadges()}
             />
           )}
+
+          {/* W2.5-4 (t_edd4a5e9): one-tap invite — universal deep link onto
+              this bill's /bill/{address} landing inside World App. */}
+          <InvitePanel
+            bill={billAddr}
+            ownerUsername={
+              (session.data?.user as { username?: string })?.username
+            }
+            usdc={escrowUSDC}
+          />
 
           {/* P1.1b: the cadence-nudge landing state the push promised. */}
           {nudge !== null && <NudgeCountdown status={nudge} usdc={escrowUSDC} />}
