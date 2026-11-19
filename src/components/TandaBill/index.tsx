@@ -18,6 +18,8 @@ import FactoryABI from "@/abi/TandaBillFactory.json";
 import BillABI from "@/abi/TandaBillV2.json";
 import BillV1ABI from "@/abi/TandaBillV1.json";
 import { PostConfirmRotationFlag, SeatBadge } from "@/components/SeatBadge";
+import { Verify } from "@/components/Verify";
+import { SEAT_JOIN_ACTION } from "@/lib/seatJoin";
 import { SettlementVectorTable } from "@/components/SettlementVector";
 import { NudgeCountdown } from "@/components/NudgeCountdown";
 import { nudgeStatus } from "@/lib/nudgeStatus";
@@ -693,6 +695,18 @@ export const TandaBill = () => {
               />
             ))}
           </div>
+
+          {/* W2-F1 (t_92a43849): the REAL seat join — proofOfHuman bound to
+              bill:wallet; verify-proof enforces the keccak binding and writes
+              seat_grants through the indexer. onVerified refreshes badges so
+              the seat flips verified the moment the grant lands. */}
+          {myWallet && (
+            <Verify
+              action={SEAT_JOIN_ACTION}
+              seat={{ bill: billAddr, wallet: myWallet }}
+              onVerified={() => void doRefreshBadges()}
+            />
+          )}
 
           {/* P1.1b: the cadence-nudge landing state the push promised. */}
           {nudge !== null && <NudgeCountdown status={nudge} usdc={escrowUSDC} />}
