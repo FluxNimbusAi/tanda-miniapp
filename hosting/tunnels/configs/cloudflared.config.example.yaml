@@ -1,0 +1,35 @@
+# =============================================================================
+# cloudflared config template — Tanda staging tunnel (ADR-0009 Plan C)
+# Schema: cloudflared v2024.02+ (flat top-level keys + ingress list).
+# This is a TEMPLATE. It is inert until you (a) have a Cloudflare account,
+# (b) own the hostname's zone, (c) replace <UUID>/<PATH>/hostname values.
+# Account creation is deliberately out of scope for this pre-stage build
+# (boundary 3: zero external provisioning).
+# =============================================================================
+
+# Named tunnel UUID from:  cloudflared tunnel create tanda-staging
+tunnel: <TUNNEL_UUID>
+
+# JSON credentials written by the same create command. Keep out of git.
+credentials-file: <PATH>/tanda-staging.json
+
+ingress:
+  # Exact hostname that World App / integration_url will use. Must be a
+  # subdomain of a zone DNS-managed by the Cloudflare account.
+  - hostname: staging.tanda.<your-zone>.com
+    service: http://localhost:3000
+    # Optional hardening while staged: restrict to your office/CI egress IPs
+    # via an Access application, then: access_policy: <ACCESS_POLICY_AUD>
+
+  # Required catch-all, must be last. cloudflared refuses to start if no
+  # ingress rule matches a request.
+  - service: http_status:404
+
+# Bind the tunnel to your Cloudflare account (free tier is enough)
+account: <ACCOUNT_TAG>
+
+# Logging: keep quiet in dev, logpath unset => stderr
+loglevel: info
+
+# Metrics listener for health scraping (loopback only — do not expose)
+metrics: 127.0.0.1:34415

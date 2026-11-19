@@ -44,3 +44,30 @@ jobs:
 
       - name: Production build
         run: npm run build
+
+  # Hosting Plan B (ADR-0009): the PC host has no docker daemon, so CI is the
+  # production image's proving ground. The image must build from
+  # hosting/Dockerfile and the standalone container must serve the landing
+  # page with ZERO env — same expectation verified locally 2026-11-19
+  # (node .next/standalone/server.js -> GET / == 200, no AUTH_SECRET needed).
+  docker-build:
+    runs-on: ubuntu-latest
+    needs: web
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Build production image
+        run: docker build -f hosting/Dockerfile -t tanda-miniapp:ci .
+
+      - name: Smoke test container
+        run: |
+          docker run -d --rm --name tanda-smoke -p 3000:3000 tanda-miniapp:ci
+          code=000
+          for i in $(seq 1 30); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:3000/ || true)
+            [ "$code" = "200" ] && break
+            sleep 1
+          done
+          echo "GET / -> HTTP $code"
+          if [ "$code" != "200" ]; then docker logs tanda-smoke; exit 1; fi
+          docker rm -f tanda-smoke
