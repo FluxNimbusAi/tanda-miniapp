@@ -13,6 +13,12 @@ import {
  *  signal = `${bill}:${wallet}` and verify-proof can fire seat_grants. */
 export type SeatContext = { bill: string; wallet: string };
 
+/** RP action for the seat-join leg. Pinned to 'bill:confirm': a member of the
+ *  frozen allowlist in src/lib/rpSignatureGuard.ts (PR #14) — the signing
+ *  oracle refuses anything else. With a seat set the caller-supplied action
+ *  never reaches the wire; the demo path keeps it untouched. */
+const SEAT_JOIN_ACTION = 'bill:confirm';
+
 /**
  * World ID verification via IDKit (native World App and web). Server-side
  * verification is mandatory in IDKit 4.x: /api/rp-signature produces the RP
@@ -63,7 +69,7 @@ export const Verify = ({
       const rpRes = await fetch('/api/rp-signature', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action }),
+        body: JSON.stringify({ action: seat ? SEAT_JOIN_ACTION : action }),
       });
 
       if (!rpRes.ok) {
