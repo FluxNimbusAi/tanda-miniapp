@@ -3,6 +3,7 @@ import { IDKit, orbLegacy, proofOfHuman, type RpContext } from '@worldcoin/idkit
 import { Button, LiveFeedback } from '@worldcoin/mini-apps-ui-kit-react';
 import { useState } from 'react';
 import {
+  SEAT_JOIN_ACTION,
   buildSeatVerifyProofBody,
   normalizeAddress,
   seatJoinSignal,
@@ -13,11 +14,13 @@ import {
  *  signal = `${bill}:${wallet}` and verify-proof can fire seat_grants. */
 export type SeatContext = { bill: string; wallet: string };
 
-/** RP action for the seat-join leg. Pinned to 'bill:confirm': a member of the
- *  frozen allowlist in src/lib/rpSignatureGuard.ts (PR #14) — the signing
- *  oracle refuses anything else. With a seat set the caller-supplied action
- *  never reaches the wire; the demo path keeps it untouched. */
-const SEAT_JOIN_ACTION = 'bill:confirm';
+// SR-F1KP (Harley kill-pass): SEAT_JOIN_ACTION is the SINGLE exported source
+// in @/lib/seatJoin (value 'bill:confirm' — a BILL_RP_ACTIONS member, PR #14).
+// The same constant pins BOTH the rp-signature body AND the IDKit.request
+// action: the signed message and the proof must carry an identical action
+// string or portal verification fails in production. The old local duplicate
+// here drifted from the lib export and the golden never asserted
+// requestCfgs[0].action, so the drift shipped. Do not re-add a local copy.
 
 /**
  * World ID verification via IDKit (native World App and web). Server-side
@@ -88,9 +91,14 @@ export const Verify = ({
       // Use IDKit request API. Seat join requests the World ID 4.0
       // proof-of-human credential (legacy Orb fallback built into the preset)
       // with the bill:wallet binding as signal; the demo keeps orbLegacy.
+      // SR-F1KP: with a seat the request action MUST be SEAT_JOIN_ACTION —
+      // identical to the rp-signature body action above, so the signed
+      // message and the proof carry the same string (portal verify gate).
+      // The caller-supplied action never rides the seat lane; non-seat keeps
+      // it untouched.
       const request = await IDKit.request({
         app_id: process.env.NEXT_PUBLIC_APP_ID as `app_${string}`,
-        action,
+        action: seat ? SEAT_JOIN_ACTION : action,
         rp_context: rpContext,
         allow_legacy_proofs: true,
       }).preset(

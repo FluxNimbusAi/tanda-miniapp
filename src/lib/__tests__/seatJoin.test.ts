@@ -11,6 +11,7 @@ import {
   seatJoinSignal,
   seatJoinSignalHash,
 } from '@/lib/seatJoin';
+import { BILL_RP_ACTIONS } from '@/lib/rpSignatureGuard';
 
 const BILL = '0xaabbccddeeff00112233445566778899aabbccd0';
 const WALLET = '0x1111111111111111111111111111111111111111';
@@ -71,6 +72,10 @@ describe('seatJoin — golden signal vectors', () => {
   });
 
   it('one registered RP action for all bills (indexer PK is bill:nullifier)', () => {
-    expect(SEAT_JOIN_ACTION).toBe('seat-join');
+    // SR-F1KP: 'bill:confirm' — the rpSignatureGuard allowlist member the
+    // rp-signature oracle will actually sign (the old 'seat-join' drifted
+    // from the proof action and portal verify failed in prod).
+    expect(SEAT_JOIN_ACTION).toBe('bill:confirm');
+    expect([...BILL_RP_ACTIONS]).toContain(SEAT_JOIN_ACTION);
   });
 });

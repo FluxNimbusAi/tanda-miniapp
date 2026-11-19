@@ -91,6 +91,7 @@ vi.mock('@worldcoin/mini-apps-ui-kit-react', () => ({
 }));
 
 import { Verify } from '@/components/Verify';
+import { SEAT_JOIN_ACTION } from '@/lib/seatJoin';
 
 const BILL_MIXED = '0xAaBbCcDDEEFF00112233445566778899AABBCCD0';
 const BILL = BILL_MIXED.toLowerCase();
@@ -196,6 +197,13 @@ describe('Verify — W2-F1 seat join golden', () => {
     // pins 'bill:confirm' (PR #14 allowlist) — the caller string never rides.
     expect(calls[0]).toEqual({ url: '/api/rp-signature', body: { action: 'bill:confirm' } });
 
+    // Leg 1b (SR-F1KP): IDKit.request carries the SAME action — the signed
+    // message must match the proof, or portal verify fails in prod. Note the
+    // host above passes the pre-fix caller string 'seat-join'; it must NOT
+    // reach the request either.
+    expect(H.requestCfgs).toHaveLength(1);
+    expect(H.requestCfgs[0]!.action).toBe(SEAT_JOIN_ACTION);
+
     // Leg 2: preset is ProofOfHuman with the fully-lowercased binding.
     expect(presetCalls).toEqual([
       {
@@ -268,6 +276,19 @@ describe('Verify — W2-F1c byte-exact wire pins (PR #18 fold, issue #15)', () =
     expect(H.rpSigBodies).toHaveLength(1);
     expect(H.rpSigBodies[0]).toBe(GOLDEN_RP_BODY);
 
+    // Pin 2b (SR-F1KP): IDKit.request action byte-exact — the signed message
+    // and the proof must carry the SAME action string (computeRpSignature-
+    // Message hashes action into the signed payload, rpSignatureGuard.ts).
+    // requestCfgs[0].action was the capture the golden left unasserted; the
+    // lib export 'seat-join' rode IDKit while 'bill:confirm' rode the oracle.
+    expect(H.requestCfgs).toHaveLength(1);
+    expect(H.requestCfgs[0]!.action).toBe('bill:confirm');
+
+    // Pin 2c (SR-F1KP): request action, rp-body action and the SINGLE
+    // exported constant agree — one string, all three legs, no local dupes.
+    expect(H.requestCfgs[0]!.action).toBe(SEAT_JOIN_ACTION);
+    expect(JSON.parse(H.rpSigBodies[0]!).action).toBe(SEAT_JOIN_ACTION);
+
     // Pin 3: preset MUST be proofOfHuman bound to `${billL}:${walletL}` —
     // mixed-case inputs normalize to the lowercase pair the server keccaks.
     expect(presetCalls).toEqual([{ type: 'ProofOfHuman', signal: GOLDEN_SIGNAL }]);
@@ -290,5 +311,10 @@ describe('Verify — W2-F1c byte-exact wire pins (PR #18 fold, issue #15)', () =
     expect(H.rpSigBodies[0]).toBe(GOLDEN_DEMO_RP_BODY);
     expect(H.vpBodies[0]).toBe(GOLDEN_DEMO_VP_BODY);
     expect(presetCalls).toEqual([{ type: 'OrbLegacy', signal: '' }]);
+
+    // Pin 7b (SR-F1KP): non-seat lane keeps the CALLER action in the request
+    // too — the seat-only pin must not swallow template behavior.
+    expect(H.requestCfgs).toHaveLength(1);
+    expect(H.requestCfgs[0]!.action).toBe('test-action');
   });
 });
