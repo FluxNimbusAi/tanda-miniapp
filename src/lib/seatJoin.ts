@@ -9,7 +9,7 @@
 // never reach IDKit — the proof could not be granted, and a wasted single-use
 // nonce burns nothing but user trust.
 import { keccak256, toBytes } from 'viem';
-import type { BillRpAction } from './rpSignatureGuard';
+import { resolveConfirmAction } from './rpSignatureGuard';
 
 /** Registered RP action for seat joins. One action for all bills by design:
  *  the nullifier is deterministic per (rp_id, action), and the indexer's
@@ -20,8 +20,15 @@ import type { BillRpAction } from './rpSignatureGuard';
  *  and the action rides BOTH the signed message and the proof — a value
  *  outside the enum (the old 'seat-join') made signed-action != proof-action
  *  and portal verify failed in prod. Typed as BillRpAction so any future
- *  non-member value fails tsc, not production. */
-export const SEAT_JOIN_ACTION: BillRpAction = 'bill:confirm';
+ *  non-member value fails tsc, not production.
+ *  PORTAL-RECON (t_70306450, ADR-0010): the name is now a single
+ *  env-overridable constant (NEXT_PUBLIC_TANDA_CONFIRM_ACTION on this leg;
+ *  the server oracle pins the matching TANDA_CONFIRM_ACTION). DEFAULT stays
+ *  'bill:confirm' — the earlier portal record 'tanda_bill_settlement' is
+ *  UNVERIFIED and must not ride the wire before a live MCP read (Flux). */
+export const SEAT_JOIN_ACTION: string = resolveConfirmAction(
+  process.env.NEXT_PUBLIC_TANDA_CONFIRM_ACTION,
+);
 
 const ADDRESS_RE = /^0x[a-fA-F0-9]{40}$/;
 

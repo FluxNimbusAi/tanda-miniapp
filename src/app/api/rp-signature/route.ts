@@ -1,6 +1,7 @@
 import { signRequest } from '@worldcoin/idkit/signing';
 import { NextResponse } from 'next/server';
 
+import { PORTAL_RP_ID } from '@/lib/portalAnchors';
 import {
   BILL_RP_ACTIONS,
   isBillRpAction,
@@ -14,7 +15,11 @@ export const runtime = 'nodejs';
 // fail loudly; the default is preserved here so this PR changes exactly one
 // behavior: the action gate. Env reads are request-time, matching the CI
 // invariant documented in .github/workflows/ci.yml.
-const DEFAULT_RP_ID = 'rp_e87d44dbb7b76d91';
+//
+// PORTAL-RECON (t_70306450, Flux ruling 4): default flipped from
+// rp_e87d44dbb7b76d91 (no portal record) to the portal-recorded anchor.
+// Single source @/lib/portalAnchors — never re-literal this value.
+const DEFAULT_RP_ID = PORTAL_RP_ID;
 
 /**
  * W2-F2: server-side action allowlist. This endpoint holds the RP signing
