@@ -66,6 +66,10 @@ export type SeatRow = {
   // fullyConfirmedAt while the seat is in confirmedMask. Event-derived
   // visibility flag; absent/false = no anomaly (neutral chip).
   postConfirmRotation?: boolean;
+  // W2.5-4 (t_edd4a5e9): World username for the seat wallet when the
+  // read-only username service resolves one. undefined = no handle / service
+  // down — fail-soft, the roster never blanks or crashes on resolution.
+  username?: string;
 };
 
 /** confirmedMask bit for a seat index — BigInt() form (template target < ES2020). */
