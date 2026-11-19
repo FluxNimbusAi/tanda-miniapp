@@ -9,12 +9,19 @@
 // never reach IDKit — the proof could not be granted, and a wasted single-use
 // nonce burns nothing but user trust.
 import { keccak256, toBytes } from 'viem';
+import type { BillRpAction } from './rpSignatureGuard';
 
 /** Registered RP action for seat joins. One action for all bills by design:
  *  the nullifier is deterministic per (rp_id, action), and the indexer's
  *  seat_grants PK (bill_address, nullifier) allows the same human to join
- *  many bills — per-bill dynamic actions would explode portal registration. */
-export const SEAT_JOIN_ACTION = 'seat-join';
+ *  many bills — per-bill dynamic actions would explode portal registration.
+ *  SR-F1KP (Harley kill-pass): single source of truth. The rp-signature
+ *  oracle (PR #14, rpSignatureGuard.ts) only signs BILL_RP_ACTIONS members,
+ *  and the action rides BOTH the signed message and the proof — a value
+ *  outside the enum (the old 'seat-join') made signed-action != proof-action
+ *  and portal verify failed in prod. Typed as BillRpAction so any future
+ *  non-member value fails tsc, not production. */
+export const SEAT_JOIN_ACTION: BillRpAction = 'bill:confirm';
 
 const ADDRESS_RE = /^0x[a-fA-F0-9]{40}$/;
 
