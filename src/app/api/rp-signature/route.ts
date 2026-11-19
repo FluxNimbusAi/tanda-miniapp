@@ -1,24 +1,73 @@
 import { signRequest } from '@worldcoin/idkit/signing';
 import { NextResponse } from 'next/server';
 
+import {
+  BILL_RP_ACTIONS,
+  isBillRpAction,
+  recordRpDeny,
+  recordRpSign,
+} from '@/lib/rpSignatureGuard';
+
 export const runtime = 'nodejs';
 
-const SIGNING_KEY = process.env.RP_SIGNING_KEY;
-const RP_ID = process.env.RP_ID ?? 'rp_e87d44dbb7b76d91';
+// SR-002-A3 (P1) will require RP_ID/RP_SIGNING_KEY strictly from env and
+// fail loudly; the default is preserved here so this PR changes exactly one
+// behavior: the action gate. Env reads are request-time, matching the CI
+// invariant documented in .github/workflows/ci.yml.
+const DEFAULT_RP_ID = 'rp_e87d44dbb7b76d91';
 
+/**
+ * W2-F2: server-side action allowlist. This endpoint holds the RP signing
+ * key — it must sign ONLY the three TandaBill protocol actions
+ * (`bill:confirm`, `bill:execute`, `bill:rotate`). Anything else is a 4xx
+ * with a logged + counted rejection (Harley SR-002 finding F2: the old
+ * route signed ANY string → open signing oracle).
+ */
 export async function POST(req: Request) {
-  if (!SIGNING_KEY) {
+  const signingKey = process.env.RP_SIGNING_KEY;
+  const rpId = process.env.RP_ID ?? DEFAULT_RP_ID;
+
+  if (!signingKey) {
     return NextResponse.json(
       { error: 'RP_SIGNING_KEY not configured' },
       { status: 500 },
     );
   }
 
-  const { action } = await req.json();
-  const sig = signRequest({ action, signingKeyHex: SIGNING_KEY });
+  let body: unknown;
+  try {
+    body = await req.json();
+  } catch {
+    recordRpDeny('malformed_body', undefined);
+    return NextResponse.json({ error: 'invalid JSON body' }, { status: 400 });
+  }
+
+  const action =
+    typeof body === 'object' && body !== null
+      ? (body as { action?: unknown }).action
+      : undefined;
+
+  if (typeof action !== 'string' || action.length === 0) {
+    recordRpDeny('missing_or_nonstring_action', action);
+    return NextResponse.json(
+      { error: 'action must be a non-empty string' },
+      { status: 400 },
+    );
+  }
+
+  if (!isBillRpAction(action)) {
+    recordRpDeny('offlist_action', action);
+    return NextResponse.json(
+      { error: 'action not allowed', allowed: BILL_RP_ACTIONS },
+      { status: 403 },
+    );
+  }
+
+  const sig = signRequest({ action, signingKeyHex: signingKey });
+  recordRpSign();
 
   return NextResponse.json({
-    rp_id: RP_ID,
+    rp_id: rpId,
     sig: sig.sig,
     nonce: sig.nonce,
     created_at: Number(sig.createdAt),
