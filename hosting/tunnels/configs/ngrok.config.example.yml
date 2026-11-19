@@ -1,0 +1,36 @@
+# =============================================================================
+# ngrok config template — Tanda staging tunnel (ADR-0009 Plan C, alt lane)
+# Schema: ngrok v3 config (`ngrok config check` validates; file lives at
+#   Windows: %LOCALAPPDATA%\ngrok\ngrok.yml
+#   Linux/macOS: ~/.config/ngrok/ngrok.yml
+#   custom: ngrok --config ./ngrok.yml tunnel start tanda-staging)
+# This is a TEMPLATE. It is inert until a ngrok account supplies AUTHTOKEN
+# (dashboard.ngrok.com -> Your Authtoken). Account creation is out of scope
+# for this pre-stage build (boundary 3: zero external provisioning).
+# =============================================================================
+version: "3"
+
+# Paste from https://dashboard.ngrok.com/get-started/your-authtoken
+# Treat like a password: real deployments keep it in the Windows Credential
+# Manager (`ngrok config add-authtoken <TOKEN>`) and never commit this file
+# with a filled value.
+authtoken: <YOUR_NGROK_AUTHTOKEN>
+
+tunnels:
+  tanda-staging:
+    # Matches the standalone server default port (hosting/Dockerfile:3000,
+    # `node .next/standalone/server.js` PORT=3000).
+    addr: http://localhost:3000
+    proto: http
+    # Keep the inspector off the LAN when testing wallet flows:
+    inspect: addr
+    # Optional (paid or claimed free domain): pin the hostname so the
+    # integration_url does not change every restart.
+    # domain: tanda-staging.ngrok.app
+    # Optional allow-list while staged (ngrok Traffic Policy / CIDR rules).
+    # cidr_allowlist: 203.0.113.0/24
+
+  # Second lane for parallel device-testing if you ever need two URLs.
+  # tanda-staging-2:
+  #   addr: http://localhost:3000
+  #   proto: http
