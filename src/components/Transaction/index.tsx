@@ -3,10 +3,10 @@
 import TestContractABI from '@/abi/TestContract.json';
 import { Button, LiveFeedback } from '@worldcoin/mini-apps-ui-kit-react';
 import { MiniKit } from '@worldcoin/minikit-js';
-import { useWaitForUserOperationReceipt } from '@worldcoin/minikit-react';
-import { useEffect, useState } from 'react';
-import { createPublicClient, encodeFunctionData, http } from 'viem';
-import { worldchain } from 'viem/chains';
+import { stageCaption, stuckMessage } from '@/lib/userOpStatus';
+import { useUserOpStatus } from '@/lib/useUserOpStatus';
+import { useEffect, useRef, useState } from 'react';
+import { encodeFunctionData } from 'viem';
 
 /**
  * This component is used to get a token from a contract
@@ -14,8 +14,10 @@ import { worldchain } from 'viem/chains';
  * inside of  Dev Portal > Configuration > Advanced
  * The general design pattern here is
  * 1. Trigger the transaction
- * 2. Poll for the receipt using the returned userOpHash
- * 3. Handle success/failure
+ * 2. Track the userOp through the golden path (W2.5-5): pending -> mined.
+ *    This demo has no :8096 indexer lane, so `mined` IS the honest terminal
+ *    (indexedNa) — never a faked "indexed" tick.
+ * 3. Handle success/failure — failures NAME the stuck stage + retry control
  */
 export const Transaction = () => {
   // See the code for this contract here: https://worldscan.org/address/0xF0882554ee924278806d708396F1a7975b732522#code
@@ -26,33 +28,19 @@ export const Transaction = () => {
   const [whichButton, setWhichButton] = useState<'getToken' | 'transferToken'>(
     'getToken',
   );
-  const [userOpHash, setUserOpHash] = useState('');
-
-  // Feel free to use your own RPC provider for better performance
-  const client = createPublicClient({
-    chain: worldchain,
-    transport: http('https://worldchain-mainnet.g.alchemy.com/public'),
-  });
-
-  const { isLoading, isSuccess, isError } = useWaitForUserOperationReceipt({
-    client,
-    userOpHash,
-  });
+  // W2.5-5 — same class as TandaBill: ONE lifecycle machine (the pure
+  // golden path in @/lib/userOpStatus), indexStatusPath null opts the
+  // indexed stage out because demo-contract txs have nothing to index.
+  const lifecycle = useUserOpStatus({ indexStatusPath: null });
+  const handledSeqRef = useRef(0);
 
   useEffect(() => {
-    if (isSuccess) {
-      console.log('Transaction confirmed!');
-      setButtonState('success');
-      setUserOpHash('');
-      setTimeout(() => setButtonState(undefined), 3000);
-    }
-
-    if (isError) {
-      setButtonState('failed');
-      setUserOpHash('');
-      setTimeout(() => setButtonState(undefined), 3000);
-    }
-  }, [isError, isSuccess]);
+    const s = lifecycle.snapshot;
+    if (!s.terminal || s.seq <= handledSeqRef.current) return;
+    handledSeqRef.current = s.seq;
+    setButtonState(s.stage === 'failed' ? 'failed' : 'success');
+    setTimeout(() => setButtonState(undefined), 3000);
+  }, [lifecycle.snapshot]);
 
   // This is a basic transaction call to mint a token
   const onClickGetToken = async () => {
@@ -83,7 +71,7 @@ export const Transaction = () => {
         throw new Error('No userOpHash returned');
       }
 
-      setUserOpHash(result.data.userOpHash);
+      lifecycle.track(result.data.userOpHash);
     } catch (err) {
       console.error('Error:', err);
       setButtonState('failed');
@@ -123,7 +111,7 @@ export const Transaction = () => {
         throw new Error('No userOpHash returned');
       }
 
-      setUserOpHash(result.data.userOpHash);
+      lifecycle.track(result.data.userOpHash);
     } catch (err) {
       console.error('Error:', err);
       setButtonState('failed');
@@ -145,7 +133,7 @@ export const Transaction = () => {
       >
         <Button
           onClick={onClickGetToken}
-          disabled={isLoading}
+          disabled={lifecycle.isTracking}
           size="lg"
           variant="primary"
           className="w-full"
@@ -164,7 +152,7 @@ export const Transaction = () => {
       >
         <Button
           onClick={onClickTransferToken}
-          disabled={isLoading}
+          disabled={lifecycle.isTracking}
           size="lg"
           variant="tertiary"
           className="w-full"
@@ -172,6 +160,23 @@ export const Transaction = () => {
           Transfer Token
         </Button>
       </LiveFeedback>
+      {/* W2.5-5 — stage visibility + named-stage retry, same class as
+          TandaBill: eternal pending is shown AS a defect with a name. */}
+      {lifecycle.isTracking && (
+        <p className="text-xs opacity-60" data-testid="demo-lifecycle-stage">
+          {stageCaption(lifecycle.snapshot)}
+        </p>
+      )}
+      {lifecycle.stage === 'failed' && (
+        <div className="flex flex-wrap items-center gap-2 rounded border p-2 border-red-500/40">
+          <p className="break-all text-xs text-red-500" data-testid="demo-lifecycle-stuck">
+            {stuckMessage(lifecycle.snapshot)}
+          </p>
+          <Button onClick={lifecycle.retry} variant="secondary" size="sm">
+            Retry tracking
+          </Button>
+        </div>
+      )}
     </div>
   );
 };

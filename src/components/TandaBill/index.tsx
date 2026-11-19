@@ -28,6 +28,8 @@ import {
   type SettlementVector,
 } from "@/lib/settlementVector";
 import { TANDA } from "@/config/tanda";
+import { stageCaption, stuckMessage } from "@/lib/userOpStatus";
+import { useUserOpStatus } from "@/lib/useUserOpStatus";
 import {
   billAction,
   maskBit,
@@ -46,7 +48,6 @@ import {
 } from "@/lib/rotationAnomaly";
 import { Button, LiveFeedback } from "@worldcoin/mini-apps-ui-kit-react";
 import { MiniKit } from "@worldcoin/minikit-js";
-import { useWaitForUserOperationReceipt } from "@worldcoin/minikit-react";
 import { useSession } from "next-auth/react";
 import { useEffect, useRef, useState } from "react";
 import { worldchainSepolia } from "viem/chains";
@@ -334,7 +335,11 @@ export const TandaBill = () => {
     "idle",
   );
   const [actionLabel, setActionLabel] = useState("");
-  const [userOpHash, setUserOpHash] = useState("");
+  // W2.5-5: the ONE lifecycle owner. sendAction/onClickCreateBill hand it
+  // the userOpHash; it drives pending -> mined -> indexed (+terminal
+  // failure naming the stuck stage + retry). See lib/useUserOpStatus.ts.
+  const lifecycle = useUserOpStatus();
+  const handledSeqRef = useRef(0);
   const [status, setStatus] = useState<string>("");
   const [billAddr, setBillAddr] = useState<Address | null>(null);
   const [snap, setSnap] = useState<BillSnapshot | null>(null);
@@ -353,11 +358,6 @@ export const TandaBill = () => {
     session.data?.user as { walletAddress?: string } | undefined
   )?.walletAddress?.toLowerCase() as Address | undefined;
   const mySeat = seats.find((s) => s.wallet.toLowerCase() === myWallet);
-
-  const { isLoading, isSuccess, isError } = useWaitForUserOperationReceipt({
-    client: publicClient,
-    userOpHash,
-  });
 
   const refresh = async (bill: Address) => {
     const p = await probeBill(bill);
@@ -387,34 +387,43 @@ export const TandaBill = () => {
     }
   };
 
+  // W2.5-5 — lifecycle terminal handler: applies each completed op EXACTLY
+  // once (handledSeqRef gates on snapshot.seq so retry() re-applies only when
+  // the re-run NEWLY terminates). Failure text always NAMES the stuck stage
+  // (relayer|indexer) — eternal pending is a defect with a name, never an
+  // endless spinner.
   useEffect(() => {
-    if (isSuccess && userOpHash) {
-      // NOTE (arch leg): userOpHash != eth tx hash; BillCreated decode belongs in
-      // a backend/indexer or via MiniKit wallet-auth receipt lookup — staged lane
-      // reports confirmation only.
-      setState("success");
-      setStatus(
-        `${actionLabel || "createBill"} confirmed — refreshing chain state`,
-      );
-      setUserOpHash("");
-      if (
-        actionLabel === "approve" &&
-        pendingFund.current !== null &&
-        billAddr
-      ) {
-        const amt = pendingFund.current;
-        pendingFund.current = null;
-        const a2 = billAction(billAddr, TANDA.factory, "fundEscrow", [amt]);
-        void sendAction("fundEscrow", a2.to, a2.data);
-      }
-      if (billAddr) void refresh(billAddr);
-    } else if (isError && userOpHash) {
+    const s = lifecycle.snapshot;
+    if (!s.terminal || s.seq <= handledSeqRef.current) return;
+    handledSeqRef.current = s.seq;
+    if (s.stage === "failed") {
       setState("failed");
+      setStatus(stuckMessage(s));
       pendingFund.current = null;
-      setUserOpHash("");
+      return;
+    }
+    // `indexed`, or `mined` with no indexer lane (approve class) — success.
+    setState("success");
+    setStatus(`${actionLabel || "createBill"} — ${stageCaption(s)}`);
+    if (
+      actionLabel === "approve" &&
+      pendingFund.current !== null &&
+      billAddr
+    ) {
+      const amt = pendingFund.current;
+      pendingFund.current = null;
+      const a2 = billAction(billAddr, TANDA.factory, "fundEscrow", [amt]);
+      void sendAction("fundEscrow", a2.to, a2.data);
+    }
+    if (s.billAddress) {
+      const landed = s.billAddress as Address;
+      setBillAddr(landed);
+      void refresh(landed);
+    } else if (billAddr) {
+      void refresh(billAddr);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isError, isSuccess]);
+  }, [lifecycle.snapshot]);
 
   const parseSeats = (): Address[] => {
     const seatsIn = seatInput.split(/[\s,]+/).filter(Boolean) as Address[];
@@ -437,7 +446,14 @@ export const TandaBill = () => {
         transactions: [{ to, data }],
       });
       if (!result.data?.userOpHash) throw new Error("No userOpHash returned");
-      setUserOpHash(result.data.userOpHash);
+      // W2.5-5: hand the hash to the lifecycle machine (pending -> mined
+      // -> indexed). Bill-scoped ops pass `bill` so the indexed proof comes
+      // from the settlement_events ledger; ERC-20 `approve` has no indexer
+      // lane and routes to the honest by-userop no_event terminal at mined.
+      lifecycle.track(
+        result.data.userOpHash,
+        label !== "approve" && billAddr ? { bill: billAddr } : {},
+      );
     } catch (err) {
       console.error(err);
       setState("failed");
@@ -465,7 +481,10 @@ export const TandaBill = () => {
         ],
       });
       if (!result.data?.userOpHash) throw new Error("No userOpHash returned");
-      setUserOpHash(result.data.userOpHash);
+      // No `bill` yet BY DESIGN: the createBill address ARRIVES via the
+      // indexed snapshot (by-userop lane -> bill_address), applied in the
+      // terminal handler above — no separate decode dead-end.
+      lifecycle.track(result.data.userOpHash);
     } catch (err) {
       console.error(err);
       setState("failed");
@@ -664,8 +683,26 @@ export const TandaBill = () => {
         Probe Bill (era + roster)
       </Button>
       {status && <p className="break-all text-xs opacity-70">{status}</p>}
-      {isLoading && (
-        <p className="text-xs opacity-60">waiting for userOp receipt…</p>
+      {/* W2.5-5 — the user always sees WHICH stage the pipeline is at. A
+          stuck op NAMES the stage (relayer|indexer) and offers retry:
+          eternal pending is a defect, never an endless spinner. */}
+      {lifecycle.isTracking && (
+        <p className="text-xs opacity-60" data-testid="lifecycle-stage">
+          {stageCaption(lifecycle.snapshot)}
+        </p>
+      )}
+      {lifecycle.stage === "failed" && (
+        <div className="flex flex-wrap items-center gap-2 rounded border p-2 border-red-500/40">
+          <p
+            className="break-all text-xs text-red-500"
+            data-testid="lifecycle-stuck"
+          >
+            {stuckMessage(lifecycle.snapshot)}
+          </p>
+          <Button onClick={lifecycle.retry} variant="secondary" size="sm">
+            Retry tracking
+          </Button>
+        </div>
       )}
 
       {snap && snap.era !== "unknown" && billAddr && (
