@@ -63,7 +63,7 @@ describe('rp-signature REJECT PATH (4xx + log + count)', () => {
     expect(res.status).toBe(403);
     const data = (await res.json()) as { error: string; allowed: string[] };
     expect(data.error).toBe('action not allowed');
-    expect(data.allowed).toEqual(['bill:confirm', 'bill:execute', 'bill:rotate']);
+    expect(data.allowed).toEqual(['bill:confirm', 'bill:execute', 'bill:rotate', 'tanda_bill_settlement']);
     expect(getRpDenyStats().denied.offlist_action).toBe(1);
     expect(getRpDenyStats().signed).toBe(0);
     expect(warnLines).toHaveLength(1);
@@ -147,8 +147,8 @@ describe('rp-signature DEFAULT RP (PORTAL-RECON, Flux ruling 4)', () => {
 });
 
 describe('guard unit behavior', () => {
-  it('enum is exactly the three bill verbs', () => {
-    expect([...BILL_RP_ACTIONS]).toEqual(['bill:confirm', 'bill:execute', 'bill:rotate']);
+  it('enum is exactly the four accepted verbs (ACTION-FLIP dual-accept window)', () => {
+    expect([...BILL_RP_ACTIONS]).toEqual(['bill:confirm', 'bill:execute', 'bill:rotate', 'tanda_bill_settlement']);
     expect(isBillRpAction('bill:execute')).toBe(true);
     expect(isBillRpAction('bill:settle')).toBe(false);
   });

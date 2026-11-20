@@ -3,7 +3,7 @@
  *
  * The /api/rp-signature route used to sign ANY client-supplied `action`
  * string with RP_SIGNING_KEY — an unrestricted signing oracle for the RP
- * identity key. This module pins the server-side enum: only the three
+ * identity key. This module pins the server-side enum: only the four
  * TandaBill protocol actions are signable, everything else is rejected
  * with a 4xx, a structured log line, and a per-reason counter.
  *
@@ -16,19 +16,27 @@
  * origin/CSRF checks = SR-002-A5, rate limiting = SR-002-A5.
  */
 
-export const BILL_RP_ACTIONS = ['bill:confirm', 'bill:execute', 'bill:rotate'] as const;
+// ACTION-FLIP (Flux ruling 19:0x, live portal readback t_31f09cee: action_v4_
+// 62c3d88d2282da0810928cbafe0a88ef = 'tanda_bill_settlement', rp_a779c304e4f624ce):
+// the portal name joins the frozen enum so BOTH wire actions are accepted by
+// default, with no env needed. 'bill:confirm' is KEPT (transition window,
+// dual-accept) so legacy signed artifacts + legacy-env deployments still verify.
+export const BILL_RP_ACTIONS = ['bill:confirm', 'bill:execute', 'bill:rotate', 'tanda_bill_settlement'] as const;
 
 export type BillRpAction = (typeof BILL_RP_ACTIONS)[number];
 
-/** Default wire action for the bill-confirm leg. PORTAL-RECON (t_70306450,
- *  Flux ruling 4): an earlier portal record names the registered action
- *  `tanda_bill_settlement` while the frozen code enum uses `bill:confirm`.
- *  NOT flipped without a live portal read — the signed message and the proof
- *  must carry the SAME string (SR-F1KP). Operators pin the confirmed name via
- *  env (server: TANDA_CONFIRM_ACTION, client bundle:
- *  NEXT_PUBLIC_TANDA_CONFIRM_ACTION); unset env keeps today's behavior
- *  byte-exact. Flag + escalation: docs/adr/ADR-0010. */
-export const CONFIRM_ACTION_DEFAULT: BillRpAction = 'bill:confirm';
+/** Default wire action for the bill-confirm leg. ACTION-FLIP (Flux ruling
+ *  19:0x + live MCP readback t_31f09cee): the live portal record CONFIRMS
+ *  `tanda_bill_settlement` (action_v4_62c3d88d2282da0810928cbafe0a88ef,
+ *  rp_a779c304e4f624ce), so the default resolution now carries the portal
+ *  name. The signed message and the proof must ride the SAME string
+ *  (SR-F1KP) — clients get it from SEAT_JOIN_ACTION, which resolves through
+ *  this default. Legacy `bill:confirm` remains ACCEPTED in BILL_RP_ACTIONS
+ *  (dual-accept, transition window, no removal). Operators pin either name
+ *  via env (server: TANDA_CONFIRM_ACTION, client bundle:
+ *  NEXT_PUBLIC_CONFIRM_ACTION, legacy alias NEXT_PUBLIC_TANDA_CONFIRM_ACTION).
+ *  Flag + escalation + flip record: docs/adr/ADR-0010. */
+export const CONFIRM_ACTION_DEFAULT: BillRpAction = 'tanda_bill_settlement';
 
 /** Pure override resolution: trimmed non-empty value wins, else default. */
 export function resolveConfirmAction(override: string | undefined): string {

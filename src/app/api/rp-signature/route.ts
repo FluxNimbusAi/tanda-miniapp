@@ -23,10 +23,13 @@ const DEFAULT_RP_ID = PORTAL_RP_ID;
 
 /**
  * W2-F2: server-side action allowlist. This endpoint holds the RP signing
- * key — it must sign ONLY the three TandaBill protocol actions
- * (`bill:confirm`, `bill:execute`, `bill:rotate`). Anything else is a 4xx
- * with a logged + counted rejection (Harley SR-002 finding F2: the old
- * route signed ANY string → open signing oracle).
+ * key — it must sign ONLY the TandaBill protocol actions (`bill:confirm`,
+ * `bill:execute`, `bill:rotate`, `tanda_bill_settlement`). Anything else is
+ * a 4xx with a logged + counted rejection (Harley SR-002 finding F2: the old
+ * route signed ANY string → open signing oracle). ACTION-FLIP (t_7f0f9775,
+ * Flux ruling 19:0x after live portal read): the portal-registered name
+ * `tanda_bill_settlement` joined the frozen enum; legacy `bill:confirm` is
+ * KEPT accepted for the transition window (dual-accept, no removal).
  */
 export async function POST(req: Request) {
   const signingKey = process.env.RP_SIGNING_KEY;
