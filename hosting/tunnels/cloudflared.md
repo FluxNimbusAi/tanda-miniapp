@@ -11,22 +11,40 @@ account + a zone you control and are executed only at staging/go-live time.
 ## 0. Install (pick per host)
 
 ```bash
-winget install --id Cloudflare.cloudflared     # Windows (PC staging host)
+npm install -g cloudflared                     # PC staging host (verified path, note below)
+# winget install --id Cloudflare.cloudflared   # fallback if npm lane unavailable
 # brew install cloudflared                     # macOS
 # apt: https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/
 cloudflared --version                          # expect 2024.x+ (config v2 schema)
 ```
 
-## 1. Quick tunnel — zero account, ephemeral (desktop browser only)
+Note (npm lane, live-verified 2026-11-20): npm pkg `cloudflared@0.7.3` postinstalls
+the real binary — reported `cloudflared version 2026.11.1`. npm 12+ blocks install
+scripts by default; global install prompted an allow — approve `cloudflared`
+(or `--allow-scripts=cloudflared`) once.
+
+## 1. Quick tunnel — zero account, ephemeral (phone-testable staging proof)
 
 ```bash
-cloudflared tunnel --url http://localhost:3000
+cloudflared tunnel --url http://127.0.0.1:3000
 # prints https://<random>.trycloudflare.com — valid CA-issued TLS
 ```
 
-Caveats: URL changes every restart; first visit shows Cloudflare's
-"TOUCH TO PROCEED" interstitial → **not World-App-usable**; no access control.
-Use only to prove the https-from-outside path.
+**Live proof on record (t_b3e207f9, 2026-11-20):** full stack built from
+`origin/main` (de161fa), `npm run start` on :3000, quick tunnel up in ~10 s
+(quic conn atl16). From *outside* via public TLS: landing 200 with ModeGate
+dual-mode SSR markup present; `GET /api/settlements?bill=0xbe43…&page=1` returned
+real indexer rows through the Next proxy → bill_index :8096 (1 settlement,
+4 events, CF-Ray header confirms edge path); malformed bill → 400. `ssl_verify_result=0`
+(CA chain OK). So the quick tunnel is **usable as the phone-testable staging
+proof lane with zero accounts** — curl receipts never saw an interstitial
+(non-browser UA passes straight through).
+
+Caveats (still true): URL changes every restart → never put it in
+`integration_url` (pre-staged portal record stays as-is); browser first-visit may
+show Cloudflare's "TOUCH TO PROCEED" interstitial (UA-gated; verify World App
+webview once manually before relying on it); no access control — treat every
+bill/rp endpoint as public while tunneled, tear down when done.
 
 ## 2. Named tunnel — stable hostname (needs Cloudflare account + own zone)
 
