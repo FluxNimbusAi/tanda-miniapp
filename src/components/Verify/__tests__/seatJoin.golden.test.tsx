@@ -14,10 +14,26 @@
 // The seat lane pins rp-signature body {"action":"bill:confirm"}: the frozen
 // allowlist member in src/lib/rpSignatureGuard.ts (PR #14) — NEVER the
 // caller-supplied action. Demo lane stays template-identical.
+//
+// ACTION-FLIP DUAL GOLDEN (t_7f0f9775, Flux ruling 19:0x): the DEFAULT wire
+// action is now 'tanda_bill_settlement' (live portal readback t_31f09cee).
+// THIS file is the LEGACY-ENV case: the hoisted block below pins
+// NEXT_PUBLIC_CONFIRM_ACTION='bill:confirm' at module-init, exactly how a
+// pre-flip deployment runs, so every byte-pin in here stays valid. The
+// default-env case (portal name on the wire, no env) is pinned in
+// seatJoin.defaultAction.golden.test.tsx. Both files must pass for CI green.
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
+
+// LEGACY-ENV pin for this golden (ADR-0010 pre-flip values). vi.hoisted runs
+// BEFORE module imports, so @/lib/seatJoin resolves SEAT_JOIN_ACTION under
+// this env. Hermetic either way: the default case deletes these in its file.
+vi.hoisted(() => {
+  process.env.NEXT_PUBLIC_CONFIRM_ACTION = 'bill:confirm';
+  process.env.NEXT_PUBLIC_TANDA_CONFIRM_ACTION = 'bill:confirm';
+});
 
 const H = vi.hoisted(() => {
   const FAKE_PROOF = {

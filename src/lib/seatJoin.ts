@@ -21,13 +21,19 @@ import { resolveConfirmAction } from './rpSignatureGuard';
  *  outside the enum (the old 'seat-join') made signed-action != proof-action
  *  and portal verify failed in prod. Typed as BillRpAction so any future
  *  non-member value fails tsc, not production.
- *  PORTAL-RECON (t_70306450, ADR-0010): the name is now a single
- *  env-overridable constant (NEXT_PUBLIC_TANDA_CONFIRM_ACTION on this leg;
- *  the server oracle pins the matching TANDA_CONFIRM_ACTION). DEFAULT stays
- *  'bill:confirm' — the earlier portal record 'tanda_bill_settlement' is
- *  UNVERIFIED and must not ride the wire before a live MCP read (Flux). */
+ *  ACTION-FLIP (Flux ruling 19:0x + live MCP readback t_31f09cee): the live
+ *  portal record CONFIRMS 'tanda_bill_settlement' as the registered action, so
+ *  the DEFAULT after resolveConfirmAction is now that portal name. Build-time
+ *  override precedence: NEXT_PUBLIC_CONFIRM_ACTION (canonical) >
+ *  NEXT_PUBLIC_TANDA_CONFIRM_ACTION (legacy alias, #29) > default; the server
+ *  oracle must pin the SAME value via TANDA_CONFIRM_ACTION (external_nullifier
+ *  derives from app_id+action — a split re-creates SR-F1KP). Legacy
+ *  'bill:confirm' stays dual-accepted in BILL_RP_ACTIONS for the transition
+ *  window. Flag + flip record: docs/adr/ADR-0010. */
+const PRIMARY_CONFIRM_ENV = process.env.NEXT_PUBLIC_CONFIRM_ACTION?.trim();
+const LEGACY_CONFIRM_ENV = process.env.NEXT_PUBLIC_TANDA_CONFIRM_ACTION?.trim();
 export const SEAT_JOIN_ACTION: string = resolveConfirmAction(
-  process.env.NEXT_PUBLIC_TANDA_CONFIRM_ACTION,
+  PRIMARY_CONFIRM_ENV || LEGACY_CONFIRM_ENV || undefined,
 );
 
 const ADDRESS_RE = /^0x[a-fA-F0-9]{40}$/;

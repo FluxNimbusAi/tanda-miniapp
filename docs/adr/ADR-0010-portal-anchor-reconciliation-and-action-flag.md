@@ -63,6 +63,22 @@ read contradicts either anchor, that read wins (ruling 4) and a follow-up card
 flips the constant + this ADR. Until then: anchors as recorded above, action
 wire default `bill:confirm`.
 
+## Resolution (ACTION-FLIP — Flux ruling 19:0x, card t_7f0f9775)
+
+The transport revived: live MCP readback (card t_31f09cee) CONFIRMS
+`action_v4_62c3d88d2282da0810928cbafe0a88ef = 'tanda_bill_settlement'` on
+`rp_a779c304e4f624ce`. Per ruling 4 the follow-up card executed:
+`CONFIRM_ACTION_DEFAULT` / `TANDA_CONFIRM_ACTION` / `SEAT_JOIN_ACTION` now
+resolve to `tanda_bill_settlement` unset-env, the portal name joined the
+frozen `BILL_RP_ACTIONS` enum, and legacy `bill:confirm` is KEPT accepted
+(dual-accept transition window — pre-flip signed artifacts still verify).
+Client override is canonical `NEXT_PUBLIC_CONFIRM_ACTION` (build-time), with
+the #29 alias `NEXT_PUBLIC_TANDA_CONFIRM_ACTION` still honored as fallback;
+`.env.sample`, `hosting/Dockerfile` and the dual goldens (legacy-env pin in
+`seatJoin.golden.test.tsx`, default-env pin in
+`seatJoin.defaultAction.golden.tsx`) carry the flipped values. Rollback is
+pure-env: pin BOTH legs to `bill:confirm`.
+
 ## Reversibility
 
 Everything here is constant-level: revert the import swap in route.ts and the

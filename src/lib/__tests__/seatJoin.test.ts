@@ -72,10 +72,14 @@ describe('seatJoin — golden signal vectors', () => {
   });
 
   it('one registered RP action for all bills (indexer PK is bill:nullifier)', () => {
-    // SR-F1KP: 'bill:confirm' — the rpSignatureGuard allowlist member the
-    // rp-signature oracle will actually sign (the old 'seat-join' drifted
-    // from the proof action and portal verify failed in prod).
-    expect(SEAT_JOIN_ACTION).toBe('bill:confirm');
+    // SR-F1KP: the rpSignatureGuard allowlist member the rp-signature oracle
+    // will actually sign (the old 'seat-join' drifted from the proof action
+    // and portal verify failed in prod). ACTION-FLIP (t_7f0f9775): the
+    // default-env resolution is the live portal name 'tanda_bill_settlement'
+    // (readback t_31f09cee, Flux ruling 19:0x); legacy 'bill:confirm' stays
+    // a dual-accepted enum member for the transition window.
+    expect(SEAT_JOIN_ACTION).toBe('tanda_bill_settlement');
     expect([...BILL_RP_ACTIONS]).toContain(SEAT_JOIN_ACTION);
+    expect([...BILL_RP_ACTIONS]).toContain('bill:confirm');
   });
 });

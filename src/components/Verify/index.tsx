@@ -16,7 +16,9 @@ import { PORTAL_APP_ID } from '@/lib/portalAnchors';
 export type SeatContext = { bill: string; wallet: string };
 
 // SR-F1KP (Harley kill-pass): SEAT_JOIN_ACTION is the SINGLE exported source
-// in @/lib/seatJoin (value 'bill:confirm' — a BILL_RP_ACTIONS member, PR #14).
+// in @/lib/seatJoin. ACTION-FLIP (t_7f0f9775): its default now resolves to the
+// live portal name 'tanda_bill_settlement' (legacy 'bill:confirm' still dual-
+// accepted server-side); whatever it resolves to rides BOTH legs below.
 // The same constant pins BOTH the rp-signature body AND the IDKit.request
 // action: the signed message and the proof must carry an identical action
 // string or portal verification fails in production. The old local duplicate
