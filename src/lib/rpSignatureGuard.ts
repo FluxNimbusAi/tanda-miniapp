@@ -20,7 +20,34 @@ export const BILL_RP_ACTIONS = ['bill:confirm', 'bill:execute', 'bill:rotate'] a
 
 export type BillRpAction = (typeof BILL_RP_ACTIONS)[number];
 
-const ALLOWED: ReadonlySet<string> = new Set<string>(BILL_RP_ACTIONS);
+/** Default wire action for the bill-confirm leg. PORTAL-RECON (t_70306450,
+ *  Flux ruling 4): an earlier portal record names the registered action
+ *  `tanda_bill_settlement` while the frozen code enum uses `bill:confirm`.
+ *  NOT flipped without a live portal read — the signed message and the proof
+ *  must carry the SAME string (SR-F1KP). Operators pin the confirmed name via
+ *  env (server: TANDA_CONFIRM_ACTION, client bundle:
+ *  NEXT_PUBLIC_TANDA_CONFIRM_ACTION); unset env keeps today's behavior
+ *  byte-exact. Flag + escalation: docs/adr/ADR-0010. */
+export const CONFIRM_ACTION_DEFAULT: BillRpAction = 'bill:confirm';
+
+/** Pure override resolution: trimmed non-empty value wins, else default. */
+export function resolveConfirmAction(override: string | undefined): string {
+  const v = override?.trim();
+  return v !== undefined && v.length > 0 ? v : CONFIRM_ACTION_DEFAULT;
+}
+
+/** Server-resolved confirm action name (deployment env, module-init). */
+export const TANDA_CONFIRM_ACTION: string = resolveConfirmAction(
+  process.env.TANDA_CONFIRM_ACTION,
+);
+
+/** Gate = frozen enum PLUS the single operator-pinned confirm name. Under the
+ *  default this is exactly BILL_RP_ACTIONS; an override adds exactly one
+ *  string and never widens the oracle to arbitrary verbs. */
+const ALLOWED: ReadonlySet<string> = new Set<string>([
+  ...BILL_RP_ACTIONS,
+  TANDA_CONFIRM_ACTION,
+]);
 
 /** Exact-match membership test. Case-sensitive by design: the signature
  *  message embeds the raw string, so `Bill:Confirm` is a DIFFERENT action

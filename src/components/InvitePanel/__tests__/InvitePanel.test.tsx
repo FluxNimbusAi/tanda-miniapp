@@ -3,6 +3,7 @@
 // MiniKit.share is mocked at the SDK boundary; every non-native route
 // (navigator.share, clipboard, failure) is asserted on exact status text.
 import { InvitePanel, type ShareRoute } from "@/components/InvitePanel";
+import { PORTAL_APP_ID } from "@/lib/portalAnchors";
 import "@testing-library/jest-dom/vitest";
 import { MiniKit } from "@worldcoin/minikit-js";
 import { fireEvent, render, screen } from "@testing-library/react";
@@ -29,7 +30,9 @@ vi.mock("@worldcoin/mini-apps-ui-kit-react", () => ({
 }));
 
 const VITALIK_EIP55 = "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045";
-const APP_ID = "app_e691f66620f3537878f639160a0e31f7";
+// PORTAL-RECON (ruling 4): input := single-source portal anchor; GOLDEN_URL
+// below stays a byte-exact LITERAL so any anchor drift fails the suite.
+const APP_ID = PORTAL_APP_ID;
 const GOLDEN_URL =
   "https://world.org/mini-app?app_id=app_e691f66620f3537878f639160a0e31f7" +
   `&path=%2Fbill%2F${VITALIK_EIP55}`;

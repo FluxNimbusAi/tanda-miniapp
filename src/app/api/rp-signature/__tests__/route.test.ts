@@ -134,6 +134,18 @@ describe('rp-signature REJECT PATH (4xx + log + count)', () => {
   });
 });
 
+describe('rp-signature DEFAULT RP (PORTAL-RECON, Flux ruling 4)', () => {
+  it('signs with the portal anchor rp_id when RP_ID env is unset', async () => {
+    delete process.env.RP_ID;
+    const res = await POST(json({ action: 'bill:confirm' }));
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as Record<string, unknown>;
+    // Byte pin by design: LITERAL, not the constant — if PORTAL_RP_ID drifts
+    // off the portal record this golden must FAIL, not silently follow.
+    expect(data.rp_id).toBe('rp_a779c304e4f624ce');
+  });
+});
+
 describe('guard unit behavior', () => {
   it('enum is exactly the three bill verbs', () => {
     expect([...BILL_RP_ACTIONS]).toEqual(['bill:confirm', 'bill:execute', 'bill:rotate']);

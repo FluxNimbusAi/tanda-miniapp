@@ -8,6 +8,7 @@ import {
   normalizeAddress,
   seatJoinSignal,
 } from '@/lib/seatJoin';
+import { PORTAL_APP_ID } from '@/lib/portalAnchors';
 
 /** Seat context for the W2-F1 real join: the bill whose roster the wallet sits
  *  on. When present the proof is cryptographically bound to it via
@@ -97,7 +98,7 @@ export const Verify = ({
       // The caller-supplied action never rides the seat lane; non-seat keeps
       // it untouched.
       const request = await IDKit.request({
-        app_id: process.env.NEXT_PUBLIC_APP_ID as `app_${string}`,
+        app_id: (process.env.NEXT_PUBLIC_APP_ID ?? PORTAL_APP_ID) as `app_${string}`,
         action: seat ? SEAT_JOIN_ACTION : action,
         rp_context: rpContext,
         allow_legacy_proofs: true,

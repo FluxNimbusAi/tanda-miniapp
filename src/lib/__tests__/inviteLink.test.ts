@@ -11,10 +11,13 @@ import {
   shortBill,
   WORLD_APP_ID_RE,
 } from "@/lib/inviteLink";
+import { PORTAL_APP_ID } from "@/lib/portalAnchors";
 
 const VITALIK_LOWER = "0xd8da6bf26964af9d7eed9e03e53415d37aa96045";
 const VITALIK_EIP55 = "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045";
-const APP_ID = "app_e691f66620f3537878f639160a0e31f7";
+// PORTAL-RECON (ruling 4): input := single-source portal anchor; the golden
+// URL below stays a byte-exact LITERAL so any anchor drift fails the suite.
+const APP_ID = PORTAL_APP_ID;
 
 describe("inviteLink golden wire", () => {
   it("canonicalizes the landing path to EIP-55", () => {

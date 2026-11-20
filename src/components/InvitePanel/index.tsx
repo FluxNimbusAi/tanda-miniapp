@@ -11,6 +11,7 @@ import {
   buildInviteShareText,
   INVITE_SHARE_TITLE,
 } from "@/lib/inviteLink";
+import { PORTAL_APP_ID } from "@/lib/portalAnchors";
 import { Button } from "@worldcoin/mini-apps-ui-kit-react";
 import { MiniKit } from "@worldcoin/minikit-js";
 import { useState } from "react";
@@ -44,7 +45,7 @@ async function webShare(
 
 export const InvitePanel = ({
   bill,
-  appId = process.env.NEXT_PUBLIC_APP_ID ?? "",
+  appId = process.env.NEXT_PUBLIC_APP_ID ?? PORTAL_APP_ID,
   ownerUsername,
   usdc,
 }: {
