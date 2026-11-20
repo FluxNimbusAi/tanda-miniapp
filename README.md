@@ -1,5 +1,18 @@
 [![CI](https://github.com/FluxNimbusAi/tanda-miniapp/actions/workflows/ci.yml/badge.svg)](https://github.com/FluxNimbusAi/tanda-miniapp/actions/workflows/ci.yml)
 
+## Demo — bill lifecycle, end-to-end
+
+![TandaBill lifecycle e2e leg run](docs/demo/lifecycle-leg.gif)
+
+Frames: [1](docs/demo/lifecycle-leg_01.png) · [2](docs/demo/lifecycle-leg_02.png)
+
+A real run of this repo's own e2e leg (`node e2e/lifecycle_leg.mts --mock`, Node 26) driving the **shipped**
+`src/lib/userOpStatus.ts` — the exact module the client hook wraps — through the golden path
+`pending → mined → indexed`, plus relayer-failure → retry recovery and the honest `indexedNa` guard.
+Only the two external lanes (World relayer, indexer) are stubbed, behind the app's real proxy paths.
+The same leg runs in CI on every push (`ci.yml` step “P-A lifecycle e2e”). Raw transcript + provenance:
+[`docs/demo/PROVENANCE.md`](docs/demo/PROVENANCE.md).
+
 ## Create a Mini App
 
 [Mini apps](https://docs.worldcoin.org/mini-apps) enable third-party developers to create native-like applications within World App.
