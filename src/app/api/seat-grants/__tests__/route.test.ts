@@ -155,3 +155,53 @@ describe('UI integration — badge renders from API-exposed verification status'
     expect(html).toContain('Verification unavailable');
   });
 });
+
+// --- M4-1a (t_3aed711f, Flux GO 11-20): indexer HTTP proxy-first lane -------
+describe('GET /api/seat-grants — BILL_INDEX_URL proxy (M4-1a)', () => {
+  async function getProxied(url: string, fetchImpl: unknown, dbFile = LIVE_DB) {
+    process.env.TANDA_INDEX_DB = dbFile;
+    if (url) process.env.BILL_INDEX_URL = url;
+    else delete process.env.BILL_INDEX_URL;
+    vi.stubGlobal('fetch', fetchImpl);
+    vi.resetModules();
+    const { GET } = await import('../route');
+    const req = { nextUrl: new URL(`http://localhost/api/seat-grants?bill=${BILL}`) } as unknown as NextRequest;
+    const res = (await GET(req)) as unknown as Response;
+    vi.unstubAllGlobals();
+    delete process.env.BILL_INDEX_URL;
+    return { status: res.status, body: (await res.json()) as FeedBody & { via?: string } };
+  }
+  const okFetch = (payload: unknown) =>
+    vi.fn(async () => Response.json(payload as never)) as unknown as typeof fetch;
+
+  it('proxy-first answer wins: keys lowercased, via:indexer-http, verified_at not forwarded', async () => {
+    const f = okFetch({ grants: { [W1.toUpperCase()]: { nullifier: 'n1', verified_at: 'ts' } } });
+    const { status, body } = await getProxied('https://idx.example', f);
+    expect(status).toBe(200);
+    expect(body.via).toBe('indexer-http');
+    expect(body.grants?.[W1]).toEqual({ nullifier: 'n1' });
+    expect(f).toHaveBeenCalledWith(
+      'https://idx.example/api/grants?bill=' + BILL,
+      expect.objectContaining({ cache: 'no-store' }),
+    );
+  });
+  it('unreachable indexer degrades to local sqlite lane (feed unchanged shape)', async () => {
+    const f = vi.fn(async () => { throw new Error('tunnel down'); }) as unknown as typeof fetch;
+    const { status, body } = await getProxied('https://idx.example', f);
+    expect(status).toBe(200);
+    expect(body.via).toBeUndefined();
+    expect(body.grants?.[W1]).toEqual({ nullifier: 'nullifier-1' });
+  });
+  it('non-200 indexer answer also degrades to local lane', async () => {
+    const f = vi.fn(async () => new Response('nope', { status: 500 })) as unknown as typeof fetch;
+    const { body } = await getProxied('https://idx.example', f);
+    expect(body.via).toBeUndefined();
+    expect(body.grants?.[W1]).toEqual({ nullifier: 'nullifier-1' });
+  });
+  it('unset BILL_INDEX_URL keeps pure dev-lane behavior: fetch never called', async () => {
+    const f = vi.fn() as unknown as typeof fetch;
+    const { body } = await getProxied('', f);
+    expect(f).not.toHaveBeenCalled();
+    expect(body.grants?.[W1]).toEqual({ nullifier: 'nullifier-1' });
+  });
+});

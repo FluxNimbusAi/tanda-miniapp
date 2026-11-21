@@ -22,12 +22,14 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createRequire } from 'node:module';
+import path from 'node:path';
 
 // Same env + default as /api/seat-grants: the canonical services/bill_index.py
 // resolves DB_PATH to <repo>/bill_index.db (parents[1]), i.e. this file.
+// Repo-relative default (showroom hygiene: no absolute user paths in public source).
 const DEFAULT_DB =
   process.env.TANDA_INDEX_DB ??
-  'C:\\Users\\dbvis\\agent-bench\\tanda-sync\\bill_index.db';
+  path.resolve(process.cwd(), '..', 'tanda-sync', 'bill_index.db');
 
 const ADDRESS_RE = /^0x[a-fA-F0-9]{40}$/;
 
