@@ -79,6 +79,7 @@ export function sanitizeActionForLog(value: unknown): string {
   if (typeof value !== 'string') {
     return value === null ? 'null' : typeof value === 'object' ? 'object' : String(value);
   }
+  // Stripping control chars is the function's purpose; the rule would flag it.
   // eslint-disable-next-line no-control-regex
   const cleaned = value.replace(/[\u0000-\u001f\u007f]/g, '?');
   return cleaned.length > LOG_MAX ? `${cleaned.slice(0, LOG_MAX)}…+${cleaned.length - LOG_MAX}` : cleaned;
