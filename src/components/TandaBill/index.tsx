@@ -163,8 +163,12 @@ async function probeBill(bill: Address): Promise<BillSnapshot> {
   const abi = isFactoryBill ? BillABI : BillV1ABI;
   const read = <T,>(fn: string, args: readonly unknown[] = []): Promise<T> =>
     publicClient.readContract(
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      { address: bill, abi, functionName: fn, args } as any
+      {
+        address: bill,
+        abi,
+        functionName: fn,
+        args,
+      } as unknown as Parameters<typeof publicClient.readContract>[0]
     ) as Promise<T>;
   const snap: BillSnapshot = { ...blank, era };
   snap.token = await read<Address>("token");
@@ -470,6 +474,9 @@ export const TandaBill = ({
     } else if (billAddr) {
       void refresh(billAddr);
     }
+    // Intentional: refresh() is re-created per render and billAddr/landed are
+    // read-through of the snapshot that IS the trigger; adding them re-fires on
+    // every keystroke (Kaizen t_5de0a4ab justification, 2026-11-22).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lifecycle.snapshot]);
 

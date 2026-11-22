@@ -36,16 +36,23 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         signedNonce: { label: 'Signed Nonce', type: 'text' },
         finalPayloadJson: { label: 'Final Payload', type: 'text' },
       },
-      // @ts-expect-error TODO
       authorize: async ({
         nonce,
         signedNonce,
         finalPayloadJson,
-      }: {
-        nonce: string;
-        signedNonce: string;
-        finalPayloadJson: string;
-      }) => {
+      }: Partial<
+        Record<"nonce" | "signedNonce" | "finalPayloadJson", unknown>
+      >) => {
+        // Kaizen t_393a399e: honor viem-auth's credentials contract instead of
+        // suppressing it. Non-string (missing/unknown) inputs fail closed.
+        if (
+          typeof nonce !== "string" ||
+          typeof signedNonce !== "string" ||
+          typeof finalPayloadJson !== "string"
+        ) {
+          console.log('Malformed wallet credentials');
+          return null;
+        }
         const expectedSignedNonce = hashNonce({ nonce });
 
         if (signedNonce !== expectedSignedNonce) {
@@ -61,12 +68,17 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           console.log('Invalid final payload');
           return null;
         }
-        // Optionally, fetch the user info from your own database
+        // Optionally, fetch the user info from your own database.
+        // getUserInfo() fields are optional upstream; the User augmentation
+        // above declares them required, so normalize here rather than widen
+        // the contract every consumer must null-check (Kaizen t_393a399e).
         const userInfo = await MiniKit.getUserInfo(finalPayload.address);
 
         return {
           id: finalPayload.address,
-          ...userInfo,
+          walletAddress: userInfo.walletAddress ?? finalPayload.address,
+          username: userInfo.username ?? '',
+          profilePictureUrl: userInfo.profilePictureUrl ?? '',
         };
       },
     }),
