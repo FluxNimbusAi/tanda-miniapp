@@ -43,6 +43,10 @@ import {
   type SeatRow,
 } from "@/lib/billActions";
 import {
+  ConfirmPreview,
+  type IntentSummary,
+} from "@/components/ConfirmPreview";
+import {
   flagToVerification,
   resolveSeatVerification,
   verificationToFlag,
@@ -65,6 +69,8 @@ import {
   isAddress,
   parseUnits,
   type Address,
+  decodeFunctionData,
+  type Abi,
 } from "viem";
 
 type Era = "factory-w10" | "factory-v2" | "legacy" | "unknown";
@@ -162,14 +168,14 @@ async function probeBill(bill: Address): Promise<BillSnapshot> {
       : "factory-v2";
   const abi = isFactoryBill ? BillABI : BillV1ABI;
   const read = <T,>(fn: string, args: readonly unknown[] = []): Promise<T> =>
-    publicClient.readContract(
-      {
-        address: bill,
-        abi,
-        functionName: fn,
-        args,
-      } as unknown as Parameters<typeof publicClient.readContract>[0]
-    ) as Promise<T>;
+    publicClient.readContract({
+      address: bill,
+      abi,
+      functionName: fn,
+      args,
+    } as unknown as Parameters<
+      typeof publicClient.readContract
+    >[0]) as Promise<T>;
   const snap: BillSnapshot = { ...blank, era };
   snap.token = await read<Address>("token");
   snap.window = await read<bigint>("SETTLEMENT_WINDOW");
@@ -238,22 +244,32 @@ async function loadBadges(bill: Address, rows: SeatRow[]): Promise<SeatRow[]> {
  *  through the pure resolver -> seat ids rotated AFTER full confirmation while
  *  in confirmedMask. Event-derived ONLY (ordering fact, zero state mutation).
  *  Any feed failure -> empty set: neutral chips, roster never blanks. */
-async function loadAnomalyFlags(bill: Address, snap: BillSnapshot): Promise<Set<number>> {
-  if (snap.era === 'unknown' || snap.era === 'legacy') return new Set();
+async function loadAnomalyFlags(
+  bill: Address,
+  snap: BillSnapshot,
+): Promise<Set<number>> {
+  if (snap.era === "unknown" || snap.era === "legacy") return new Set();
   if (snap.fullyConfirmedAt <= BigInt(0)) return new Set();
   try {
     // Loose-typed log path mirrors the readContract discipline (artifact JSON
     // is not const-inferred); avoids any.
     const getLogsLoose = publicClient.getLogs as unknown as (q: {
-      address: Address; abi: unknown; eventName: string; fromBlock: bigint;
+      address: Address;
+      abi: unknown;
+      eventName: string;
+      fromBlock: bigint;
     }) => Promise<{ args?: unknown; blockNumber: bigint | null }[]>;
     const logs = await getLogsLoose({
-      address: bill, abi: BillABI, eventName: 'SeatWalletRotated', fromBlock: BigInt(0),
+      address: bill,
+      abi: BillABI,
+      eventName: "SeatWalletRotated",
+      fromBlock: BigInt(0),
     });
     const events: RotationEventLite[] = [];
     for (const log of logs) {
       const raw = (log.args as { seatId?: unknown } | undefined)?.seatId;
-      const seatId = typeof raw === 'bigint' || typeof raw === 'number' ? Number(raw) : -1;
+      const seatId =
+        typeof raw === "bigint" || typeof raw === "number" ? Number(raw) : -1;
       if (log.blockNumber === null) continue;
       const blk = await publicClient.getBlock({ blockNumber: log.blockNumber });
       events.push({ seatId, blockTimestamp: Number(blk.timestamp) });
@@ -319,9 +335,7 @@ async function fetchSeatRows(
   // loadBadges: any resolution error leaves rows as the chain produced them.
   let rowsWithHandles = rows;
   try {
-    const byWallet = await lookupUsernamesForWallets(
-      rows.map((r) => r.wallet),
-    );
+    const byWallet = await lookupUsernamesForWallets(rows.map((r) => r.wallet));
     rowsWithHandles = rows.map((r) => {
       const rec = byWallet.get(r.wallet.toLowerCase());
       return rec ? { ...r, username: rec.username } : r;
@@ -335,8 +349,7 @@ async function fetchSeatRows(
 const Badge = ({ seat, mine }: { seat: SeatRow; mine: boolean }) => (
   <span className="flex items-center justify-between gap-2 rounded border px-2 py-1 text-xs">
     <span className="break-all">
-      #{seat.seatId}{" "}
-      {seat.username ? `@${seat.username} · ` : ""}
+      #{seat.seatId} {seat.username ? `@${seat.username} · ` : ""}
       {`${seat.wallet.slice(0, 6)}…${seat.wallet.slice(-4)}`}
       {mine && <b className="ml-1">(me)</b>}
     </span>
@@ -379,6 +392,56 @@ export const TandaBill = ({
   const [nowSec, setNowSec] = useState(0);
   const [expenseAmt, setExpenseAmt] = useState("");
   const [fundAmt, setFundAmt] = useState("");
+  // VISUAL-B — pending signature awaiting explicit preview confirmation.
+  const [intent, setIntent] = useState<{
+    label: string;
+    to: Address;
+    data: `0x${string}`;
+  } | null>(null);
+  const intentSummary = (i: {
+    label: string;
+    to: Address;
+    data: `0x${string}`;
+  }): IntentSummary => {
+    let amount: string | undefined;
+    try {
+      const outer = decodeFunctionData({
+        abi: FactoryABI as unknown as Abi,
+        data: i.data,
+      });
+      if (outer.functionName === "callBill") {
+        const inner = decodeFunctionData({
+          abi: BillABI as unknown as Abi,
+          data: (outer.args as [Address, `0x${string}`])[1],
+        });
+        const args = (inner.args as readonly unknown[]) ?? [];
+        if (
+          inner.functionName === "fundEscrow" ||
+          inner.functionName === "addExpense"
+        ) {
+          const big = args[0];
+          if (typeof big === "bigint" && big > BigInt(0))
+            amount = formatUnits(big, 6);
+        }
+      } else if (outer.functionName === "approve") {
+        const big = (outer.args as readonly unknown[])[1];
+        if (typeof big === "bigint") amount = formatUnits(big, 6);
+      }
+    } catch {
+      /* best-effort decode; the verb line still describes the intent */
+    }
+    return { fn: i.label, amount, target: i.to };
+  };
+  const onConfirmSign = () => {
+    if (!intent) return;
+    const i = intent;
+    setIntent(null);
+    void dispatchAction(i);
+  };
+  const onCancelSign = () => {
+    setIntent(null);
+    setStatus("sign cancelled — nothing was sent");
+  };
   // fund = approve THEN fundEscrow; amount parked here between the two userOps.
   const pendingFund = useRef<bigint | null>(null);
   // P0.3 badge refresh: latest rows outside render + busy flag for the button.
@@ -457,11 +520,7 @@ export const TandaBill = ({
     // `indexed`, or `mined` with no indexer lane (approve class) — success.
     setState("success");
     setStatus(`${actionLabel || "createBill"} — ${stageCaption(s)}`);
-    if (
-      actionLabel === "approve" &&
-      pendingFund.current !== null &&
-      billAddr
-    ) {
+    if (actionLabel === "approve" && pendingFund.current !== null && billAddr) {
       const amt = pendingFund.current;
       pendingFund.current = null;
       const a2 = billAction(billAddr, TANDA.factory, "fundEscrow", [amt]);
@@ -504,11 +563,23 @@ export const TandaBill = ({
     return [...addresses, ...handles.map((h) => byHandle.get(h)!.address)];
   };
 
+  // VISUAL-B (t_d3455bc6) — Phantom-class preview-before-sign gate. EVERY
+  // money-path signature (incl. the approve->fundEscrow chained op, which is
+  // a SEPARATE userOp) surfaces a ConfirmPreview first; the userOp is only
+  // ever built and sent on explicit confirm. Cancel sends nothing.
   const sendAction = async (
     label: string,
     to: Address,
     data: `0x${string}`,
   ) => {
+    setIntent({ label, to, data });
+  };
+  const dispatchAction = async (i: {
+    label: string;
+    to: Address;
+    data: `0x${string}`;
+  }) => {
+    const { label, to, data } = i;
     setState("pending");
     setActionLabel(label);
     setStatus("");
@@ -618,9 +689,13 @@ export const TandaBill = ({
   // timestamp, so nothing renders on a cold mount.
   const nudge = snap !== null && nowSec > 0 ? nudgeStatus(snap, nowSec) : null;
   const escrowUSDC =
-    snap !== null && snap.era !== 'unknown' && snap.era !== 'legacy' &&
+    snap !== null &&
+    snap.era !== "unknown" &&
+    snap.era !== "legacy" &&
     snap.escrow > BigInt(0)
-      ? formatUnits(snap.escrow, 6).replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '')
+      ? formatUnits(snap.escrow, 6)
+          .replace(/(\.\d*?)0+$/, "$1")
+          .replace(/\.$/, "")
       : undefined;
   // P1.4b: settlement payout vector (factory era only — legacy never populates
   // settlementTotal/expectedMask, so it stays null there). A build throw means
@@ -764,6 +839,13 @@ export const TandaBill = ({
       <Button onClick={onClickProbeBill} variant="secondary">
         Probe Bill (era + roster)
       </Button>
+      {intent && (
+        <ConfirmPreview
+          summary={intentSummary(intent)}
+          onConfirm={onConfirmSign}
+          onCancel={onCancelSign}
+        />
+      )}
       {status && <p className="break-all text-xs opacity-70">{status}</p>}
       {/* W2.5-5 — the user always sees WHICH stage the pipeline is at. A
           stuck op NAMES the stage (relayer|indexer) and offers retry:
@@ -838,7 +920,9 @@ export const TandaBill = ({
           />
 
           {/* P1.1b: the cadence-nudge landing state the push promised. */}
-          {nudge !== null && <NudgeCountdown status={nudge} usdc={escrowUSDC} />}
+          {nudge !== null && (
+            <NudgeCountdown status={nudge} usdc={escrowUSDC} />
+          )}
           {settlementVector && (
             <SettlementVectorTable vector={settlementVector} />
           )}
