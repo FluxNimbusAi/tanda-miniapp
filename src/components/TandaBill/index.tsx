@@ -68,7 +68,7 @@ import { worldchainSepolia } from "viem/chains";
 import {
   createPublicClient,
   encodeFunctionData,
-  toBytes,
+  toHex,
   formatUnits,
   http,
   isAddress,
@@ -978,17 +978,21 @@ const SEAT_BURN_ENABLED = process.env.NEXT_PUBLIC_SEAT_BURN === "1";
                   <button
                     type="button"
                     className="rounded px-3 py-1 text-xs font-semibold"
-                    onClick={() =>
-                      sendAction(
-                        "registerSeat",
+                    onClick={() => {
+                      // FLUX DEFECT FIX (2026-11-24): clones are never targets -
+                      // burn rides the SAME factory.callBill lane as every write
+                      // (MiniKit entrypoint allowlist = factory + USDC only).
+                      const a = billAction(
                         billAddr as Address,
-                        encodeFunctionData({
-                          abi: BillABI,
-                          functionName: "registerSeat",
-                          args: [pb.nullifier, pb.wallet, toBytes(pb.signal)],
-                        }),
-                      )
-                    }
+                        TANDA.factory,
+                        "registerSeat",
+                        // viem 2.45.3 wants hex-string bytes here: a
+                        // Uint8Array detonates encodeAbiParameters
+                        // (hex_.replace) at click time - golden-caught.
+                        [pb.nullifier, pb.wallet, toHex(pb.signal)],
+                      );
+                      sendAction(a.label, a.to, a.data);
+                    }}
                   >
                     Burn seat on-chain
                   </button>
