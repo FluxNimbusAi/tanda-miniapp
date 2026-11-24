@@ -7,6 +7,7 @@
 import { auth } from "@/auth";
 import { Page } from "@/components/PageLayout";
 import { TandaBill } from "@/components/TandaBill";
+import { SettlementTimeline } from "@/components/SettlementTimeline";
 import { Marble, TopBar } from "@worldcoin/mini-apps-ui-kit-react";
 import { isAddress, type Address } from "viem";
 
@@ -43,7 +44,11 @@ export default async function BillDeepLinkPage({
       </Page.Header>
       <Page.Main className="flex flex-col items-center justify-start gap-4 mb-16">
         {bill ? (
-          <TandaBill initialBill={bill} />
+          <div className="grid w-full max-w-xl gap-4">
+            <TandaBill initialBill={bill} />
+            {/* ui-t1 P2: lifecycle timeline - pure function of indexer reads */}
+            <SettlementTimeline bill={bill} />
+          </div>
         ) : (
           <p className="text-sm opacity-70" data-testid="bill-deeplink-invalid">
             That invite link is malformed — ask the bill owner for a fresh one.
