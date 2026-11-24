@@ -9,7 +9,6 @@ import { NextRequest, NextResponse } from 'next/server';
 
 const APP_ID = process.env.WORLD_APP_ID ?? ''; // never hard-coded (showroom hygiene)
 const ACTION = 'seat-gate-v1';
-const RPC_4801 = 'https://worldchain-sepolia.g.alchemy.com/public';
 
 type VerifyReq = {
   nullifier_hash: string;
