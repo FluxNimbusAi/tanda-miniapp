@@ -73,4 +73,29 @@ describe('EmptyState — UX3-#9 spec pins', () => {
       expect(a.getAttribute('href') ?? '').not.toMatch(/github\.com|https?:/);
     }
   });
+
+  // BS-5.1a NEGATIVE-TEST LAW (Flux ruling 57194): a grep-golden that cannot
+  // fail on injection is decoration. N0 proves the matcher is non-vacuous by
+  // running it against a deliberately poisoned copy object; N1 asserts the
+  // SHIPPED copy passes the same matcher. Pair is permanent — future copy
+  // edits trip N1 only if they actually introduce forbidden language.
+  const violationsOf = (copy: Record<string, unknown>): string[] => {
+    const hay = JSON.stringify(copy).toLowerCase();
+    return FORBIDDEN_STRINGS.filter((f) => hay.includes(f.toLowerCase()));
+  };
+
+  it('N0 matcher is non-vacuous: injected forbidden string IS detected', () => {
+    const poisoned = {
+      ...C,
+      body: 'Your enforceable debt settles on-chain — nullifier burned.',
+    };
+    const v = violationsOf(poisoned);
+    expect(v).toContain('enforceable debt');
+    expect(v).toContain('nullifier');
+    expect(v).toHaveLength(2);
+  });
+
+  it('N1 shipped copy passes the same matcher (clean)', () => {
+    expect(violationsOf(C)).toEqual([]);
+  });
 });
