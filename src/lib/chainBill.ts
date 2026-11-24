@@ -164,6 +164,27 @@ export const billAbi = [
  * (one past the indexer's count catches "chain has MORE"), returning only the
  * fields the indexer's settlements rows also carry.
  */
+// Fast-twin variant (pre-P0.1a): same selector settlements(uint256), struct
+// WITHOUT claimedMask -> 7 outputs. Must keep the real name or viem derives
+// the wrong selector. Verified live vs FastTandaBillV2.sol L70-79.
+const settlements7Abi = [
+  {
+    type: "function",
+    name: "settlements",
+    stateMutability: "view",
+    inputs: [{ name: "i", type: "uint256" }],
+    outputs: [
+      { name: "totalAmount", type: "uint256" },
+      { name: "settledAt", type: "uint64" },
+      { name: "initiatedAt", type: "uint64" },
+      { name: "expectedMask", type: "uint256" },
+      { name: "confirmedMask", type: "uint256" },
+      { name: "fullyConfirmedAt", type: "uint64" },
+      { name: "refunded", type: "bool" },
+    ],
+  },
+] as const;
+
 export type ChainSettleProbe = {
   rows: { id: number; total_amount: string; settled_at: number; claimed_count: number; refunded: boolean }[];
   chain_more: boolean;
@@ -249,13 +270,53 @@ export type ChainBill = {
     initiated_at: number;
     expected_mask: string;
     confirmed_mask: string;
-    claimed_mask: string;
+    // null = variant without on-chain claim tracking (fast-twin): UNKNOWABLE,
+    // never faked. V2 bills carry the mask.
+    claimed_mask: string | null;
     refunded: boolean;
   }[];
   events: ChainFeedEvent[];
   source: "chain";
   as_of_block: number;
 };
+
+/**
+ * Pure state->feed synthesis (extracted for goldens; Xixi §7.4 + Flux audit
+ * item 1). IMPLIED-COMPLETION RULE: settlements existing proves funding
+ * happened even when escrow has since drained to 0 - the CTA defect on
+ * fully-settled bills ("Fund escrow" fallback) came from deriving funded
+ * from balance instead of from consequence. Amount for a drained-escrow
+ * funded row cites the first settlement total (a bound, not a lie).
+ */
+export function synthesizeFeed(
+  escrowBalance: bigint,
+  settlements: ChainBill["settlements"],
+  blk: number,
+): ChainFeedEvent[] {
+  if (escrowBalance <= BigInt(0) && settlements.length === 0) return [];
+  const out: ChainFeedEvent[] = [];
+  out.push({
+    event: "EscrowFunded",
+    block: blk,
+    amount:
+      escrowBalance > BigInt(0)
+        ? escrowBalance.toString()
+        : (settlements[0]?.total_amount ?? null),
+  });
+  for (const st of settlements) {
+    out.push({ event: "SettlementInitiated", block: blk, amount: st.total_amount });
+    for (const seat of maskBits(BigInt(st.confirmed_mask)))
+      out.push({ event: "SeatConfirmed", block: blk, seat_id: seat });
+    if (st.settled_at > 0)
+      out.push({ event: "SettlementExecuted", block: blk, amount: st.total_amount });
+    if (st.claimed_mask != null)
+      for (const seat of maskBits(BigInt(st.claimed_mask)))
+        out.push({ event: "SeatPayoutClaimed", block: blk, seat_id: seat });
+    if (st.refunded)
+      out.push({ event: "SettlementRefunded", block: blk, amount: st.total_amount });
+  }
+  return out;
+}
 
 /**
  * Decode one bill entirely from chain state. Throws on unreachable RPC.
@@ -309,48 +370,73 @@ export async function readChainBill(bill: Address): Promise<ChainBill> {
   }
 
   const settlements: ChainBill["settlements"] = [];
+  type St8 = readonly [bigint, bigint, bigint, bigint, bigint, bigint, bigint, boolean];
+  type St7 = readonly [bigint, bigint, bigint, bigint, bigint, bigint, boolean];
   for (let i = 0; i < 16; i++) {
+    // V2 layout first; on decode failure try the fast-twin 7-field layout;
+    // only a revert in BOTH means the index is out of range.
+    let st8: St8 | null = null;
+    let st7: St7 | null = null;
     try {
-      // 8 outputs: auto-getter omits dynamic payouts (see abi note above).
-      const st = (await client.readContract({
+      st8 = (await client.readContract({
         address: addr,
         abi: billAbi,
         functionName: "settlements",
         args: [BigInt(i)],
-      })) as readonly [
-        bigint,
-        bigint,
-        bigint,
-        bigint,
-        bigint,
-        bigint,
-        bigint,
-        boolean,
-      ];
-      const payouts = (await client.readContract({
+      })) as unknown as St8;
+    } catch {
+      try {
+        st7 = (await client.readContract({
+          address: addr,
+          abi: settlements7Abi,
+          functionName: "settlements",
+          args: [BigInt(i)],
+        })) as unknown as St7;
+      } catch {
+        break; // neither variant answers: end of array
+      }
+    }
+    // payouts accessor is OPTIONAL per variant: a failed read keeps the row.
+    let payouts: readonly bigint[] = [];
+    try {
+      payouts = (await client.readContract({
         address: addr,
         abi: billAbi,
         functionName: "settlementPayouts",
         args: [BigInt(i)],
       })) as readonly bigint[];
+    } catch {
+      /* variant without the accessor - state row stays honest */
+    }
+    if (st7) {
       settlements.push({
         id: i,
-        total_amount: st[0].toString(),
+        total_amount: st7[0].toString(),
         payouts: payouts.map((p) => p.toString()),
-        settled_at: Number(st[1]),
-        initiated_at: Number(st[2]),
-        expected_mask: st[3].toString(),
-        confirmed_mask: st[4].toString(),
-        claimed_mask: st[5].toString(),
-        refunded: st[7],
+        settled_at: Number(st7[1]),
+        initiated_at: Number(st7[2]),
+        expected_mask: st7[3].toString(),
+        confirmed_mask: st7[4].toString(),
+        claimed_mask: null, // no on-chain claim proof in this variant
+        refunded: st7[6],
       });
-    } catch {
-      break; // out-of-range: array fully enumerated (clean revert on correct ABI)
+    } else if (st8) {
+      settlements.push({
+        id: i,
+        total_amount: st8[0].toString(),
+        payouts: payouts.map((p) => p.toString()),
+        settled_at: Number(st8[1]),
+        initiated_at: Number(st8[2]),
+        expected_mask: st8[3].toString(),
+        confirmed_mask: st8[4].toString(),
+        claimed_mask: st8[5].toString(),
+        refunded: st8[7],
+      });
     }
   }
 
   // Preferred: real event rows via eth_getLogs over a bounded window.
-  const events: ChainFeedEvent[] = [];
+  let events: ChainFeedEvent[] = [];
   try {
     const from = asOf > LOG_WINDOW ? asOf - LOG_WINDOW : BigInt(0);
     const logs = await client.getLogs({
@@ -383,40 +469,11 @@ export async function readChainBill(bill: Address): Promise<ChainBill> {
 
   // Synthesized-from-state rows: honest "as of" block, same names the
   // billLifecycle derivation expects. Only what the storage PROVES.
-  if (
-    events.length === 0 &&
-    (escrowBalance > BigInt(0) || settlements.length > 0)
-  ) {
-    const blk = Number(asOf);
-    if (escrowBalance > BigInt(0))
-      events.push({
-        event: "EscrowFunded",
-        block: blk,
-        amount: escrowBalance.toString(),
-      });
-    for (const st of settlements) {
-      events.push({
-        event: "SettlementInitiated",
-        block: blk,
-        amount: st.total_amount,
-      });
-      for (const seat of maskBits(BigInt(st.confirmed_mask)))
-        events.push({ event: "SeatConfirmed", block: blk, seat_id: seat });
-      if (st.settled_at > 0)
-        events.push({
-          event: "SettlementExecuted",
-          block: blk,
-          amount: st.total_amount,
-        });
-      for (const seat of maskBits(BigInt(st.claimed_mask)))
-        events.push({ event: "SeatPayoutClaimed", block: blk, seat_id: seat });
-      if (st.refunded)
-        events.push({
-          event: "SettlementRefunded",
-          block: blk,
-          amount: st.total_amount,
-        });
-    }
+  // FIX (Flux audit item 1, CTA defect): a fully-settled bill has drained
+  // escrow to 0, but settlements existing PROVES funding necessarily
+  // happened - synthesize EscrowFunded from existence, not from balance.
+  if (events.length === 0) {
+    events = synthesizeFeed(escrowBalance, settlements, Number(asOf));
   }
 
   return {
