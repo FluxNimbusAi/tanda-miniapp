@@ -16,9 +16,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'Tanda — zero-fee, escrow-guaranteed, verified-humans-only group bills',
+  title: 'Tanda — proof-escrow settlement between provably-unique humans',
   description:
-    'No entry caps, no ads, no custody. USDC sits in escrow from day one — when everyone confirms, money moves on-chain.',
+    'Settled by contract, not trust: every seat is a World ID, every payout a pull-claim on-chain receipt. Group bills run the same escrow law — USDC from day one, zero fees, no custody.',
 };
 
 export default async function RootLayout({
