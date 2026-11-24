@@ -298,7 +298,7 @@ export async function readChainBill(bill: Address): Promise<ChainBill> {
   }
 
   // Preferred: real event rows via eth_getLogs over a bounded window.
-  let events: ChainFeedEvent[] = [];
+  const events: ChainFeedEvent[] = [];
   try {
     const from = asOf > LOG_WINDOW ? asOf - LOG_WINDOW : BigInt(0);
     const logs = await client.getLogs({
