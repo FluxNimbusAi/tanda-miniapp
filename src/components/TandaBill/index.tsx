@@ -493,7 +493,18 @@ export const TandaBill = ({
       setStatus("probing invited bill…");
       try {
         await refresh(initialBill);
-        setStatus("");
+        // Audit item 1 (Flux ruling): a settled bill must show its outcome,
+        // never a perpetual "probing" state.
+        let settled = false;
+        try {
+          const f = await fetch(`/api/settlements?bill=${initialBill}&page=1`, {
+            cache: "no-store",
+          }).then((r) => (r.ok ? r.json() : null));
+          settled = (f?.settlements?.length ?? 0) > 0;
+        } catch {
+          /* status stays outcome-less, never wrong */
+        }
+        setStatus(settled ? "Settled — payouts released on-chain" : "");
       } catch (e) {
         setStatus(
           `invite bill probe failed: ${(e as Error).message.slice(0, 120)}`,
@@ -800,7 +811,7 @@ export const TandaBill = ({
   return (
     <div className="grid w-full gap-4 rounded-xl border p-4">
       <p className="text-lg font-semibold">
-        Tanda Bill (W8 shell — chain {TANDA.chainId})
+        Tanda Bill · World Chain Sepolia
       </p>
       <p className="text-xs opacity-70">
         Funded means funded. USDC sits in escrow from day one. When everyone
