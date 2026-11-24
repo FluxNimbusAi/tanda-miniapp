@@ -456,6 +456,13 @@ export const TandaBill = ({
   const [badgeBusy, setBadgeBusy] = useState(false);
 
   const session = useSession();
+
+// BRIDGE-2 entrance gate (Flux COMMAND 2026-11-24): the panel stays dark
+// until the static factory address lands in the portal's Contract
+// Entrypoints ([HUMAN_GATE] @d3b0m3n) - MiniKit would otherwise reject
+// registerSeat userops with invalid_contract in a real World App session.
+const SEAT_BURN_ENABLED = process.env.NEXT_PUBLIC_SEAT_BURN === "1";
+
   const myWallet = (
     session.data?.user as { walletAddress?: string } | undefined
   )?.walletAddress?.toLowerCase() as Address | undefined;
@@ -952,7 +959,7 @@ export const TandaBill = ({
               Portal-verified grants (real 66-hex nullifiers only; chain
               placeholders excluded by shape) not yet active seats.
               Same sendAction choke point -> ConfirmPreview -> MiniKit. */}
-          {isOwner && pendingBurns.length > 0 && (
+          {isOwner && SEAT_BURN_ENABLED && pendingBurns.length > 0 && (
             <div className="grid gap-1" data-testid="pending-seat-burns">
               <p className="text-xs font-semibold opacity-80">
                 Verified humans awaiting their seat —
