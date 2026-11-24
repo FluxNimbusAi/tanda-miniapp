@@ -37,13 +37,11 @@ const ADDR_RE = /^0x[a-fA-F0-9]{40}$/;
 
 const fmtUSDC = (units: unknown): string => {
   const n = Number(units);
-  return Number.isFinite(n) ? `${(n / 1e6).toFixed(6)} USDC` : "\u2014";
+  return Number.isFinite(n) ? `${(n / 1e6).toFixed(6)} USDC` : "—";
 };
 const short = (v: unknown): string => {
   const s = String(v ?? "");
-  return s.length > 16
-    ? `${s.slice(0, 10)}\u2026${s.slice(-6)}`
-    : s || "\u2014";
+  return s.length > 16 ? `${s.slice(0, 10)}…${s.slice(-6)}` : s || "—";
 };
 // SR-003 precedence (golden contract in src/app/settlements):
 // refunded > executed > fully_confirmed > initiated.
@@ -101,7 +99,7 @@ export const LiveExplorer = () => {
       setFeed(f);
       setSeatCount(Object.keys(g.grants ?? {}).length);
     } catch {
-      setError("Indexer unavailable \u2014 try again shortly.");
+      setError("Indexer unavailable — try again shortly.");
     } finally {
       setPending(false);
     }
@@ -110,20 +108,23 @@ export const LiveExplorer = () => {
   const rows = feed?.settlements ?? [];
   const events = feed?.events ?? [];
   const indexerState =
-    status === null ? "\u2026" : status.indexed ? "live" : "offline";
+    status === null ? "…" : status.indexed ? "live" : "offline";
 
   return (
     <main className="mx-auto flex min-h-dvh w-full max-w-2xl flex-col gap-6 px-6 py-10">
       <header className="grid gap-1">
-        <p className="text-xs font-semibold uppercase tracking-wide opacity-60">
-          Tanda \u00b7 read-only live explorer
+        <p className="text-xs font-bold uppercase tracking-[0.2em] text-[#3ec8ff]">
+          TandaBill · read-only live explorer
         </p>
-        <h1 className="text-2xl font-semibold">
+        <h1
+          className="font-semibold"
+          style={{ fontSize: "clamp(1.5rem, 6vw, 2.1rem)", lineHeight: 1.15 }}
+        >
           Funded means funded. Watch it happen.
         </h1>
-        <p className="text-sm opacity-70">
+        <p className="text-sm opacity-85">
           Live Sepolia (4801) state, straight from the escrow indexer. No
-          wallet, no login \u2014 receipts only.
+          wallet, no login — receipts only.
         </p>
       </header>
 
@@ -134,15 +135,13 @@ export const LiveExplorer = () => {
         <Chip label="indexer" value={indexerState} />
         <Chip
           label="chain"
-          value={
-            status?.chain_id === undefined ? "\u2014" : String(status.chain_id)
-          }
+          value={status?.chain_id === undefined ? "—" : String(status.chain_id)}
         />
         <Chip
           label="bills indexed"
           value={
             status?.bills_indexed === undefined
-              ? "\u2014"
+              ? "—"
               : String(status.bills_indexed)
           }
         />
@@ -150,31 +149,27 @@ export const LiveExplorer = () => {
           label="bills resolved"
           value={
             status?.bills_resolved === undefined
-              ? "\u2014"
+              ? "—"
               : String(status.bills_resolved)
           }
         />
         <Chip
           label="settlements"
           value={
-            status?.settlements === undefined
-              ? "\u2014"
-              : String(status.settlements)
+            status?.settlements === undefined ? "—" : String(status.settlements)
           }
         />
         <Chip
           label="seat grants"
           value={
-            status?.seat_grants === undefined
-              ? "\u2014"
-              : String(status.seat_grants)
+            status?.seat_grants === undefined ? "—" : String(status.seat_grants)
           }
         />
         <Chip
           label="verifications"
           value={
             status?.verifications === undefined
-              ? "\u2014"
+              ? "—"
               : String(status.verifications)
           }
         />
@@ -191,7 +186,7 @@ export const LiveExplorer = () => {
           aria-label="Bill address"
           value={bill}
           onChange={(e) => setBill(e.target.value)}
-          placeholder="0x\u2026 bill contract address"
+          placeholder="0x… bill contract address"
           className="w-full rounded-lg border px-3 py-2 text-sm"
         />
         <button
@@ -199,7 +194,7 @@ export const LiveExplorer = () => {
           disabled={pending}
           className="rounded-lg bg-black px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
         >
-          {pending ? "Loading\u2026" : "Look up bill"}
+          {pending ? "Loading…" : "Look up bill"}
         </button>
       </form>
       {error && (
@@ -214,14 +209,14 @@ export const LiveExplorer = () => {
             Settlements for {short(feed.bill)}
           </h2>
           <p className="text-xs opacity-60">
-            {feed.total_settlements ?? rows.length} settlement(s) \u00b7{" "}
+            {feed.total_settlements ?? rows.length} settlement(s) ·{" "}
             {feed.total_events ?? events.length} lifecycle event(s)
-            {seatCount !== null && ` \u00b7 ${seatCount} verified seat(s)`}
+            {seatCount !== null && ` · ${seatCount} verified seat(s)`}
           </p>
           {rows.length === 0 && (
-            <p className="text-sm opacity-70">
-              No settlements recorded for this bill yet \u2014 the ledger stays
-              empty until funds move.
+            <p className="text-sm opacity-85">
+              No settlements recorded for this bill yet — the ledger stays empty
+              until funds move.
             </p>
           )}
           {rows.map((r, i) => (
@@ -243,7 +238,7 @@ export const LiveExplorer = () => {
               {r.tx_hash ? <p>Execute tx: {String(r.tx_hash)}</p> : null}
               {r.claimed_count !== undefined && (
                 <p className="tabular-nums">
-                  Claimed: {String(r.claimed_count)} seat(s) \u00b7{" "}
+                  Claimed: {String(r.claimed_count)} seat(s) ·{" "}
                   {fmtUSDC(r.claimed_amount)}
                 </p>
               )}
@@ -262,11 +257,9 @@ export const LiveExplorer = () => {
                 <span className="font-semibold">{String(ev.event)}</span>
                 <span className="tabular-nums opacity-70">
                   block {String(ev.block)}
-                  {ev.seat_id != null
-                    ? ` \u00b7 seat ${String(ev.seat_id)}`
-                    : ""}
-                  {ev.amount != null ? ` \u00b7 ${fmtUSDC(ev.amount)}` : ""}{" "}
-                  \u00b7 tx {short(ev.tx_hash)}
+                  {ev.seat_id != null ? ` · seat ${String(ev.seat_id)}` : ""}
+                  {ev.amount != null ? ` · ${fmtUSDC(ev.amount)}` : ""} · tx{" "}
+                  {short(ev.tx_hash)}
                 </span>
               </li>
             ))}
@@ -277,7 +270,7 @@ export const LiveExplorer = () => {
       {/* DEF-4 [t_1d9b5038]: World mini-app rule — no footer element; the
           read-only disclaimer lives inline at the end of the page flow. */}
       <p className="mt-auto text-xs opacity-50">
-        Public read-only view \u2014 nothing here can move funds.
+        Public read-only view — nothing here can move funds.
       </p>
     </main>
   );
