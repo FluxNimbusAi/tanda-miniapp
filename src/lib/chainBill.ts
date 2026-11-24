@@ -158,6 +158,58 @@ export const billAbi = [
   },
 ] as const satisfies Abi;
 
+/**
+ * Cheap chain probe for the §7.4 disagreement guard (OVERLAY-1 t_cead034d):
+ * reads the 8-field settlements(i) getter for i in 0..expectedCount inclusive
+ * (one past the indexer's count catches "chain has MORE"), returning only the
+ * fields the indexer's settlements rows also carry.
+ */
+export type ChainSettleProbe = {
+  rows: { id: number; total_amount: string; settled_at: number; claimed_count: number; refunded: boolean }[];
+  chain_more: boolean;
+};
+export async function probeChainSettlements(bill: Address, expectedCount: number): Promise<ChainSettleProbe> {
+  const client = chainClient();
+  const rows: ChainSettleProbe["rows"] = [];
+  let chain_more = false;
+  for (let i = 0; i <= 16; i++) {
+    if (i > expectedCount) break;
+    try {
+      const st = (await client.readContract({ address: bill, abi: billAbi, functionName: 'settlements', args: [BigInt(i)] })) as readonly [bigint, bigint, bigint, bigint, bigint, bigint, bigint, boolean];
+      if (i === expectedCount + 1) chain_more = true;
+      rows.push({ id: i, total_amount: st[0].toString(), settled_at: Number(st[1]), claimed_count: maskBits(st[5]).length, refunded: st[7] });
+    } catch {
+      break;
+    }
+  }
+  return { rows: rows.slice(0, expectedCount), chain_more: chain_more || rows.length > expectedCount };
+}
+
+/** Pure diff of indexer rows vs chain probe; returns human-readable mismatches (empty = agree). */
+export function compareIndexChain(
+  idx: { settlement_id: number | string; total_amount?: string | number; settled_at?: number; claimed_count?: number; refunded?: boolean }[],
+  probe: ChainSettleProbe,
+): string[] {
+  const diffs: string[] = [];
+  if (probe.chain_more) diffs.push(`chain has settlements beyond indexer count (${idx.length})`);
+  for (const c of probe.rows) {
+    const i = idx.find((r) => Number(r.settlement_id) === c.id);
+    if (!i) {
+      diffs.push(`settlement ${c.id} on chain missing from index`);
+      continue;
+    }
+    if (i.total_amount != null && String(i.total_amount) !== c.total_amount)
+      diffs.push(`settlement ${c.id} total_amount index=${i.total_amount} chain=${c.total_amount}`);
+    if (i.settled_at != null && (i.settled_at > 0) !== (c.settled_at > 0))
+      diffs.push(`settlement ${c.id} settled flag index=${i.settled_at > 0} chain=${c.settled_at > 0}`);
+    if (i.claimed_count != null && i.claimed_count !== c.claimed_count)
+      diffs.push(`settlement ${c.id} claimed_count index=${i.claimed_count} chain=${c.claimed_count}`);
+    if (i.refunded != null && i.refunded !== c.refunded)
+      diffs.push(`settlement ${c.id} refunded index=${i.refunded} chain=${c.refunded}`);
+  }
+  return diffs;
+}
+
 /** bit i set -> seat i present in mask. Canonical decode for masks on-chain. */
 export function maskBits(mask: bigint): number[] {
   const out: number[] = [];

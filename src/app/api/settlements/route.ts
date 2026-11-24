@@ -87,9 +87,30 @@ export async function GET(req: NextRequest) {
   }
   const url = `${INDEXER}/api/settlements?bill=${encodeURIComponent(bill)}&page=${pageRaw}`;
   try {
-    const res = await fetch(url, { cache: "no-store" });
+    const res = await fetch(url, { cache: 'no-store' });
     if (!res.ok) throw new Error(`indexer http ${res.status}`);
     const body = (await res.json()) as Record<string, unknown>;
+    // OVERLAY-1 (t_cead034d, §7.4 settled law): on disagreement, chain overrides.
+    // Guard runs on page 1 only (full-set semantics); probe is N+1 cheap reads.
+    if (page === 1 && Array.isArray(body.settlements)) {
+      try {
+        const { probeChainSettlements, compareIndexChain } = await import('@/lib/chainBill');
+        const idx = body.settlements as { settlement_id: number }[];
+        const total = typeof body.total_settlements === 'number' ? body.total_settlements : idx.length;
+        const probe = await probeChainSettlements(bill as Address, total);
+        const diffs = compareIndexChain(idx as never, probe);
+        if (diffs.length > 0) {
+          const out = await chainBody(bill, page, 'integrity defect: index disagrees with chain');
+          return NextResponse.json(
+            { ...(await out.json()), integrity: { status: 'DEFECT', mismatches: diffs } },
+            { status: 200 },
+          );
+        }
+        return NextResponse.json({ ...body, integrity: { status: 'OK' } }, { status: res.status });
+      } catch {
+        /* guard itself failed (RPC down etc.) - never fail the indexer path for it */
+      }
+    }
     return NextResponse.json(body, { status: res.status });
   } catch (e) {
     // Direct Truth fallback: decode from chain instead of serving empty rows.
