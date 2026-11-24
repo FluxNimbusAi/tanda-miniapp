@@ -3,63 +3,42 @@
     "type": "function",
     "name": "MAX_HOLD",
     "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint64",
-        "internalType": "uint64"
-      }
-    ],
+    "outputs": [{ "name": "", "type": "uint64", "internalType": "uint64" }],
     "stateMutability": "view"
   },
   {
     "type": "function",
     "name": "MAX_SEATS",
     "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
+    "outputs": [{ "name": "", "type": "uint256", "internalType": "uint256" }],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "PERMIT2",
+    "inputs": [],
+    "outputs": [{ "name": "", "type": "address", "internalType": "address" }],
     "stateMutability": "view"
   },
   {
     "type": "function",
     "name": "SETTLEMENT_WINDOW",
     "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint64",
-        "internalType": "uint64"
-      }
-    ],
+    "outputs": [{ "name": "", "type": "uint64", "internalType": "uint64" }],
     "stateMutability": "view"
   },
   {
     "type": "function",
     "name": "activeSeatCount",
     "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
+    "outputs": [{ "name": "", "type": "uint256", "internalType": "uint256" }],
     "stateMutability": "view"
   },
   {
     "type": "function",
     "name": "addExpense",
     "inputs": [
-      {
-        "name": "amount",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
+      { "name": "amount", "type": "uint256", "internalType": "uint256" }
     ],
     "outputs": [],
     "stateMutability": "nonpayable"
@@ -68,24 +47,35 @@
     "type": "function",
     "name": "addSeat",
     "inputs": [
-      {
-        "name": "wallet",
-        "type": "address",
-        "internalType": "address"
-      }
+      { "name": "wallet", "type": "address", "internalType": "address" }
     ],
     "outputs": [],
     "stateMutability": "nonpayable"
   },
   {
     "type": "function",
+    "name": "claimSettlement",
+    "inputs": [
+      { "name": "settlementId", "type": "uint256", "internalType": "uint256" }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "claimablePayout",
+    "inputs": [
+      { "name": "settlementId", "type": "uint256", "internalType": "uint256" },
+      { "name": "wallet", "type": "address", "internalType": "address" }
+    ],
+    "outputs": [{ "name": "", "type": "uint256", "internalType": "uint256" }],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "confirmSettlement",
     "inputs": [
-      {
-        "name": "settlementId",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
+      { "name": "settlementId", "type": "uint256", "internalType": "uint256" }
     ],
     "outputs": [],
     "stateMutability": "nonpayable"
@@ -94,24 +84,14 @@
     "type": "function",
     "name": "escrowBalance",
     "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
+    "outputs": [{ "name": "", "type": "uint256", "internalType": "uint256" }],
     "stateMutability": "view"
   },
   {
     "type": "function",
     "name": "executeSettlement",
     "inputs": [
-      {
-        "name": "settlementId",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
+      { "name": "settlementId", "type": "uint256", "internalType": "uint256" }
     ],
     "outputs": [],
     "stateMutability": "nonpayable"
@@ -119,34 +99,12 @@
   {
     "type": "function",
     "name": "expenses",
-    "inputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
+    "inputs": [{ "name": "", "type": "uint256", "internalType": "uint256" }],
     "outputs": [
-      {
-        "name": "amount",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "paidBy",
-        "type": "address",
-        "internalType": "address"
-      },
-      {
-        "name": "addedAt",
-        "type": "uint64",
-        "internalType": "uint64"
-      },
-      {
-        "name": "settled",
-        "type": "bool",
-        "internalType": "bool"
-      }
+      { "name": "amount", "type": "uint256", "internalType": "uint256" },
+      { "name": "paidBy", "type": "address", "internalType": "address" },
+      { "name": "addedAt", "type": "uint64", "internalType": "uint64" },
+      { "name": "settled", "type": "bool", "internalType": "bool" }
     ],
     "stateMutability": "view"
   },
@@ -154,24 +112,23 @@
     "type": "function",
     "name": "factory",
     "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "address",
-        "internalType": "address"
-      }
-    ],
+    "outputs": [{ "name": "", "type": "address", "internalType": "address" }],
     "stateMutability": "view"
   },
   {
     "type": "function",
     "name": "fundEscrow",
     "inputs": [
-      {
-        "name": "amount",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
+      { "name": "amount", "type": "uint256", "internalType": "uint256" }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "fundEscrowFromPermit2",
+    "inputs": [
+      { "name": "amount", "type": "uint256", "internalType": "uint256" }
     ],
     "outputs": [],
     "stateMutability": "nonpayable"
@@ -185,11 +142,7 @@
         "type": "address",
         "internalType": "contract IERC20"
       },
-      {
-        "name": "creator",
-        "type": "address",
-        "internalType": "address"
-      },
+      { "name": "creator", "type": "address", "internalType": "address" },
       {
         "name": "initialSeats",
         "type": "address[]",
@@ -210,48 +163,35 @@
     "type": "function",
     "name": "isSeatConfirmed",
     "inputs": [
-      {
-        "name": "settlementId",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "wallet",
-        "type": "address",
-        "internalType": "address"
-      }
+      { "name": "settlementId", "type": "uint256", "internalType": "uint256" },
+      { "name": "wallet", "type": "address", "internalType": "address" }
     ],
-    "outputs": [
-      {
-        "name": "",
-        "type": "bool",
-        "internalType": "bool"
-      }
-    ],
+    "outputs": [{ "name": "", "type": "bool", "internalType": "bool" }],
     "stateMutability": "view"
   },
   {
     "type": "function",
     "name": "owner",
     "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "address",
-        "internalType": "address"
-      }
-    ],
+    "outputs": [{ "name": "", "type": "address", "internalType": "address" }],
     "stateMutability": "view"
   },
   {
     "type": "function",
     "name": "refundSettlement",
     "inputs": [
-      {
-        "name": "settlementId",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
+      { "name": "settlementId", "type": "uint256", "internalType": "uint256" }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "registerSeat",
+    "inputs": [
+      { "name": "nullifier", "type": "bytes32", "internalType": "bytes32" },
+      { "name": "wallet", "type": "address", "internalType": "address" },
+      { "name": "signal", "type": "bytes", "internalType": "bytes" }
     ],
     "outputs": [],
     "stateMutability": "nonpayable"
@@ -260,11 +200,7 @@
     "type": "function",
     "name": "removeSeat",
     "inputs": [
-      {
-        "name": "seatId",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
+      { "name": "seatId", "type": "uint256", "internalType": "uint256" }
     ],
     "outputs": [],
     "stateMutability": "nonpayable"
@@ -273,16 +209,8 @@
     "type": "function",
     "name": "rotateSeatWallet",
     "inputs": [
-      {
-        "name": "seatId",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "newWallet",
-        "type": "address",
-        "internalType": "address"
-      }
+      { "name": "seatId", "type": "uint256", "internalType": "uint256" },
+      { "name": "newWallet", "type": "address", "internalType": "address" }
     ],
     "outputs": [],
     "stateMutability": "nonpayable"
@@ -290,48 +218,32 @@
   {
     "type": "function",
     "name": "seatIdOf",
-    "inputs": [
-      {
-        "name": "",
-        "type": "address",
-        "internalType": "address"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
+    "inputs": [{ "name": "", "type": "address", "internalType": "address" }],
+    "outputs": [{ "name": "", "type": "uint256", "internalType": "uint256" }],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "seatNullifierOf",
+    "inputs": [{ "name": "", "type": "bytes32", "internalType": "bytes32" }],
+    "outputs": [{ "name": "", "type": "address", "internalType": "address" }],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "seatNullifierSignalHash",
+    "inputs": [{ "name": "", "type": "bytes32", "internalType": "bytes32" }],
+    "outputs": [{ "name": "", "type": "bytes32", "internalType": "bytes32" }],
     "stateMutability": "view"
   },
   {
     "type": "function",
     "name": "seats",
-    "inputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
+    "inputs": [{ "name": "", "type": "uint256", "internalType": "uint256" }],
     "outputs": [
-      {
-        "name": "wallet",
-        "type": "address",
-        "internalType": "address"
-      },
-      {
-        "name": "joinedAt",
-        "type": "uint64",
-        "internalType": "uint64"
-      },
-      {
-        "name": "active",
-        "type": "bool",
-        "internalType": "bool"
-      }
+      { "name": "wallet", "type": "address", "internalType": "address" },
+      { "name": "joinedAt", "type": "uint64", "internalType": "uint64" },
+      { "name": "active", "type": "bool", "internalType": "bool" }
     ],
     "stateMutability": "view"
   },
@@ -339,80 +251,37 @@
     "type": "function",
     "name": "settlementInitiated",
     "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "bool",
-        "internalType": "bool"
-      }
-    ],
+    "outputs": [{ "name": "", "type": "bool", "internalType": "bool" }],
     "stateMutability": "view"
   },
   {
     "type": "function",
     "name": "settlementPayouts",
     "inputs": [
-      {
-        "name": "settlementId",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
+      { "name": "settlementId", "type": "uint256", "internalType": "uint256" }
     ],
     "outputs": [
-      {
-        "name": "",
-        "type": "uint256[]",
-        "internalType": "uint256[]"
-      }
+      { "name": "", "type": "uint256[]", "internalType": "uint256[]" }
     ],
     "stateMutability": "view"
   },
   {
     "type": "function",
     "name": "settlements",
-    "inputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
+    "inputs": [{ "name": "", "type": "uint256", "internalType": "uint256" }],
     "outputs": [
-      {
-        "name": "totalAmount",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "settledAt",
-        "type": "uint64",
-        "internalType": "uint64"
-      },
-      {
-        "name": "initiatedAt",
-        "type": "uint64",
-        "internalType": "uint64"
-      },
-      {
-        "name": "expectedMask",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "confirmedMask",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
+      { "name": "totalAmount", "type": "uint256", "internalType": "uint256" },
+      { "name": "settledAt", "type": "uint64", "internalType": "uint64" },
+      { "name": "initiatedAt", "type": "uint64", "internalType": "uint64" },
+      { "name": "expectedMask", "type": "uint256", "internalType": "uint256" },
+      { "name": "confirmedMask", "type": "uint256", "internalType": "uint256" },
+      { "name": "claimedMask", "type": "uint256", "internalType": "uint256" },
       {
         "name": "fullyConfirmedAt",
         "type": "uint64",
         "internalType": "uint64"
       },
-      {
-        "name": "refunded",
-        "type": "bool",
-        "internalType": "bool"
-      }
+      { "name": "refunded", "type": "bool", "internalType": "bool" }
     ],
     "stateMutability": "view"
   },
@@ -421,11 +290,7 @@
     "name": "token",
     "inputs": [],
     "outputs": [
-      {
-        "name": "",
-        "type": "address",
-        "internalType": "contract IERC20"
-      }
+      { "name": "", "type": "address", "internalType": "contract IERC20" }
     ],
     "stateMutability": "view"
   },
@@ -434,11 +299,7 @@
     "name": "totalExpenses",
     "inputs": [],
     "outputs": [
-      {
-        "name": "total",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
+      { "name": "total", "type": "uint256", "internalType": "uint256" }
     ],
     "stateMutability": "view"
   },
@@ -544,6 +405,68 @@
         "name": "seatId",
         "type": "uint256",
         "indexed": true,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "SeatGranted",
+    "inputs": [
+      {
+        "name": "seatId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "wallet",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "nullifier",
+        "type": "bytes32",
+        "indexed": true,
+        "internalType": "bytes32"
+      },
+      {
+        "name": "signalHash",
+        "type": "bytes32",
+        "indexed": false,
+        "internalType": "bytes32"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "SeatPayoutClaimed",
+    "inputs": [
+      {
+        "name": "settlementId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "seatId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "wallet",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "amount",
+        "type": "uint256",
+        "indexed": false,
         "internalType": "uint256"
       }
     ],
@@ -681,232 +604,63 @@
     ],
     "anonymous": false
   },
-  {
-    "type": "error",
-    "name": "AlreadyConfirmed",
-    "inputs": []
-  },
-  {
-    "type": "error",
-    "name": "AlreadyInitialized",
-    "inputs": []
-  },
-  {
-    "type": "error",
-    "name": "AlreadySettled",
-    "inputs": []
-  },
+  { "type": "error", "name": "AlreadyConfirmed", "inputs": [] },
+  { "type": "error", "name": "AlreadyInitialized", "inputs": [] },
+  { "type": "error", "name": "AlreadySettled", "inputs": [] },
   {
     "type": "error",
     "name": "DuplicateSeat",
     "inputs": [
-      {
-        "name": "wallet",
-        "type": "address",
-        "internalType": "address"
-      }
+      { "name": "wallet", "type": "address", "internalType": "address" }
     ]
   },
+  { "type": "error", "name": "EscrowEmpty", "inputs": [] },
+  { "type": "error", "name": "NoActiveSeats", "inputs": [] },
+  { "type": "error", "name": "NotAnExpectedSeat", "inputs": [] },
+  { "type": "error", "name": "NotAwaitingConfirmations", "inputs": [] },
+  { "type": "error", "name": "NotFullyConfirmed", "inputs": [] },
+  { "type": "error", "name": "NotOwner", "inputs": [] },
+  { "type": "error", "name": "NotSeatOrOwner", "inputs": [] },
+  { "type": "error", "name": "NotYetClaimable", "inputs": [] },
   {
     "type": "error",
-    "name": "EscrowEmpty",
-    "inputs": []
+    "name": "NullifierUsed",
+    "inputs": [
+      { "name": "nullifier", "type": "bytes32", "internalType": "bytes32" }
+    ]
   },
+  { "type": "error", "name": "PayoutAlreadyClaimed", "inputs": [] },
+  { "type": "error", "name": "Permit2AmountTooLarge", "inputs": [] },
+  { "type": "error", "name": "RefundNotAvailable", "inputs": [] },
+  { "type": "error", "name": "RotationWindowLocked", "inputs": [] },
   {
     "type": "error",
-    "name": "NoActiveSeats",
-    "inputs": []
-  },
-  {
-    "type": "error",
-    "name": "NotAnExpectedSeat",
-    "inputs": []
-  },
-  {
-    "type": "error",
-    "name": "NotAwaitingConfirmations",
-    "inputs": []
-  },
-  {
-    "type": "error",
-    "name": "NotFullyConfirmed",
-    "inputs": []
-  },
-  {
-    "type": "error",
-    "name": "NotOwner",
-    "inputs": []
-  },
-  {
-    "type": "error",
-    "name": "NotSeatOrOwner",
-    "inputs": []
-  },
-  {
-    "type": "error",
-    "name": "RefundNotAvailable",
-    "inputs": []
-  },
-  {
-    "type": "error",
-    "name": "RotationWindowLocked",
-    "inputs": []
+    "name": "SafeERC20Failed",
+    "inputs": [
+      { "name": "token", "type": "address", "internalType": "address" },
+      { "name": "reason", "type": "bytes", "internalType": "bytes" }
+    ]
   },
   {
     "type": "error",
     "name": "SeatInactive",
     "inputs": [
-      {
-        "name": "seatId",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
+      { "name": "seatId", "type": "uint256", "internalType": "uint256" }
     ]
   },
   {
     "type": "error",
     "name": "SeatNotFound",
     "inputs": [
-      {
-        "name": "seatId",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
+      { "name": "seatId", "type": "uint256", "internalType": "uint256" }
     ]
   },
-  {
-    "type": "error",
-    "name": "SeatRotationClosed",
-    "inputs": []
-  },
-  {
-    "type": "error",
-    "name": "SettlementInitiatedAlready",
-    "inputs": []
-  },
-  {
-    "type": "error",
-    "name": "SettlementNotFound",
-    "inputs": []
-  },
-  {
-    "type": "error",
-    "name": "TokenTransferFailed",
-    "inputs": []
-  },
-  {
-    "type": "error",
-    "name": "TooManySeats",
-    "inputs": []
-  },
-  {
-    "type": "error",
-    "name": "WindowNotElapsed",
-    "inputs": []
-  },
-  {
-    "type": "error",
-    "name": "ZeroWallet",
-    "inputs": []
-  },
-  {
-    "type": "function",
-    "name": "balanceOf",
-    "stateMutability": "view",
-    "inputs": [
-      {
-        "name": "account",
-        "type": "address"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256"
-      }
-    ]
-  },
-  {
-    "type": "function",
-    "name": "claimSettlement",
-    "inputs": [
-      {
-        "name": "settlementId",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "outputs": [],
-    "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
-    "name": "claimablePayout",
-    "inputs": [
-      {
-        "name": "settlementId",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "wallet",
-        "type": "address",
-        "internalType": "address"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "transfer",
-    "stateMutability": "nonpayable",
-    "inputs": [
-      {
-        "name": "to",
-        "type": "address"
-      },
-      {
-        "name": "amount",
-        "type": "uint256"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "",
-        "type": "bool"
-      }
-    ]
-  },
-  {
-    "type": "function",
-    "name": "transferFrom",
-    "stateMutability": "nonpayable",
-    "inputs": [
-      {
-        "name": "from",
-        "type": "address"
-      },
-      {
-        "name": "to",
-        "type": "address"
-      },
-      {
-        "name": "amount",
-        "type": "uint256"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "",
-        "type": "bool"
-      }
-    ]
-  }
+  { "type": "error", "name": "SeatRotationClosed", "inputs": [] },
+  { "type": "error", "name": "SettlementInitiatedAlready", "inputs": [] },
+  { "type": "error", "name": "SettlementNotFound", "inputs": [] },
+  { "type": "error", "name": "TokenTransferFailed", "inputs": [] },
+  { "type": "error", "name": "TooManySeats", "inputs": [] },
+  { "type": "error", "name": "WindowNotElapsed", "inputs": [] },
+  { "type": "error", "name": "ZeroNullifier", "inputs": [] },
+  { "type": "error", "name": "ZeroWallet", "inputs": [] }
 ]

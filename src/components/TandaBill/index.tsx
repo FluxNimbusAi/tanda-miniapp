@@ -19,7 +19,11 @@ import BillABI from "@/abi/TandaBillV2.json";
 import BillV1ABI from "@/abi/TandaBillV1.json";
 import { PostConfirmRotationFlag, SeatBadge } from "@/components/SeatBadge";
 import { Verify } from "@/components/Verify";
-import { SEAT_JOIN_ACTION } from "@/lib/seatJoin";
+import {
+  SEAT_JOIN_ACTION,
+  pendingOnChainGrants,
+  type GrantFeed,
+} from "@/lib/seatJoin";
 import { InvitePanel } from "@/components/InvitePanel";
 import {
   lookupUsernamesForWallets,
@@ -64,6 +68,7 @@ import { worldchainSepolia } from "viem/chains";
 import {
   createPublicClient,
   encodeFunctionData,
+  toBytes,
   formatUnits,
   http,
   isAddress,
@@ -389,6 +394,8 @@ export const TandaBill = ({
   const [billAddr, setBillAddr] = useState<Address | null>(null);
   const [snap, setSnap] = useState<BillSnapshot | null>(null);
   const [seats, setSeats] = useState<SeatRow[]>([]);
+  // BRIDGE-2 (t_a9f67ed4): portal-verified grants awaiting the on-chain burn.
+  const [grantFeed, setGrantFeed] = useState<GrantFeed | null>(null);
   const [nowSec, setNowSec] = useState(0);
   const [expenseAmt, setExpenseAmt] = useState("");
   const [fundAmt, setFundAmt] = useState("");
@@ -449,6 +456,13 @@ export const TandaBill = ({
   const [badgeBusy, setBadgeBusy] = useState(false);
 
   const session = useSession();
+
+// BRIDGE-2 entrance gate (Flux COMMAND 2026-11-24): the panel stays dark
+// until the static factory address lands in the portal's Contract
+// Entrypoints ([HUMAN_GATE] @d3b0m3n) - MiniKit would otherwise reject
+// registerSeat userops with invalid_contract in a real World App session.
+const SEAT_BURN_ENABLED = process.env.NEXT_PUBLIC_SEAT_BURN === "1";
+
   const myWallet = (
     session.data?.user as { walletAddress?: string } | undefined
   )?.walletAddress?.toLowerCase() as Address | undefined;
@@ -755,6 +769,29 @@ export const TandaBill = ({
 
   // --- Owner console (frozen V2 semantics; every write through billAction,
   //     the ONE sanctioned approve path is usdcApprove: to=USDC, spender=clone) ---
+  // BRIDGE-2: pull seat_grants with the bill; pending = verified + unseated.
+  useEffect(() => {
+    if (!billAddr) {
+      setGrantFeed(null);
+      return;
+    }
+    let live = true;
+    fetch(`/api/seat-grants?bill=${encodeURIComponent(billAddr)}`, {
+      cache: "no-store",
+    })
+      .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
+      .then((g) => live && setGrantFeed((g?.grants ?? {}) as GrantFeed))
+      .catch(() => live && setGrantFeed({}));
+    return () => {
+      live = false;
+    };
+  }, [billAddr]);
+
+  const pendingBurns =
+    billAddr && grantFeed
+      ? pendingOnChainGrants(grantFeed, seats, billAddr)
+      : [];
+
   const isOwner =
     snap !== null &&
     myWallet !== undefined &&
@@ -810,9 +847,7 @@ export const TandaBill = ({
 
   return (
     <div className="grid w-full gap-4 rounded-xl border p-4">
-      <p className="text-lg font-semibold">
-        Tanda Bill · World Chain Sepolia
-      </p>
+      <p className="text-lg font-semibold">Tanda Bill · World Chain Sepolia</p>
       <p className="text-xs opacity-70">
         Funded means funded. USDC sits in escrow from day one. When everyone
         confirms, money moves — nobody can ghost your payout.
@@ -918,6 +953,48 @@ export const TandaBill = ({
               seat={{ bill: billAddr, wallet: myWallet }}
               onVerified={() => void doRefreshBadges()}
             />
+          )}
+
+          {/* BRIDGE-2 (t_a9f67ed4): owner-side on-chain nullifier burn.
+              Portal-verified grants (real 66-hex nullifiers only; chain
+              placeholders excluded by shape) not yet active seats.
+              Same sendAction choke point -> ConfirmPreview -> MiniKit. */}
+          {isOwner && SEAT_BURN_ENABLED && pendingBurns.length > 0 && (
+            <div className="grid gap-1" data-testid="pending-seat-burns">
+              <p className="text-xs font-semibold opacity-80">
+                Verified humans awaiting their seat —
+                <span className="font-mono [font-variant-numeric:tabular-nums]">
+                  {pendingBurns.length}
+                </span>
+              </p>
+              {pendingBurns.map((pb) => (
+                <div
+                  key={pb.wallet}
+                  className="flex items-center justify-between gap-2"
+                >
+                  <span className="font-mono text-xs opacity-70">
+                    {pb.wallet.slice(0, 6)}...{pb.wallet.slice(-4)}
+                  </span>
+                  <button
+                    type="button"
+                    className="rounded px-3 py-1 text-xs font-semibold"
+                    onClick={() =>
+                      sendAction(
+                        "registerSeat",
+                        billAddr as Address,
+                        encodeFunctionData({
+                          abi: BillABI,
+                          functionName: "registerSeat",
+                          args: [pb.nullifier, pb.wallet, toBytes(pb.signal)],
+                        }),
+                      )
+                    }
+                  >
+                    Burn seat on-chain
+                  </button>
+                </div>
+              ))}
+            </div>
           )}
 
           {/* W2.5-4 (t_edd4a5e9): one-tap invite — universal deep link onto
