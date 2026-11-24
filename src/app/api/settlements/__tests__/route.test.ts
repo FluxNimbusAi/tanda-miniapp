@@ -17,6 +17,7 @@ type FeedBody = {
   events?: unknown[];
   indexed?: boolean;
   source?: string;
+  integrity?: { status?: string; mismatches?: string[] };
   ok?: boolean;
   error?: string;
   note?: string;
@@ -27,10 +28,12 @@ const IDX = "http://idx.test";
 
 // UGLY-1: the route now falls through to the Direct-Truth chain read. Mock it
 // so the suite stays zero-network; default impl REJECTS (full-degradation path).
-vi.mock("@/lib/chainBill", () => ({
+vi.mock('@/lib/chainBill', () => ({
   readChainBill: vi.fn(async () => {
-    throw new Error("chain blocked in tests");
+    throw new Error('chain blocked in tests');
   }),
+  probeChainSettlements: vi.fn(async () => ({ rows: [], chain_more: false })),
+  compareIndexChain: vi.fn(() => [] as string[]),
 }));
 const FAKE_CHAIN = {
   core: {
@@ -149,7 +152,42 @@ describe("GET /api/settlements proxy", () => {
     expect(e.body.source).toBe("chain");
     expect(e.body.total_events).toBe(1);
   });
-  it("degrades to [] rows (200) when indexer AND chain are both unreachable", async () => {
+  it('OVERLAY-1: index-chain disagreement serves chain rows + DEFECT flag', async () => {
+    vi.mocked(fetch).mockImplementationOnce(async () =>
+      new Response(
+        JSON.stringify({
+          bill: BILL, page: 1, page_size: 20, total_settlements: 1, total_events: 0,
+          settlements: [{ settlement_id: 0, total_amount: '999', settled_at: 0, claimed_count: 0, refunded: false }],
+          events: [],
+        }),
+        { status: 200 },
+      ),
+    );
+    const chainBill = await import('@/lib/chainBill');
+    vi.mocked(chainBill.probeChainSettlements).mockResolvedValueOnce({
+      rows: [{ id: 0, total_amount: '20000', settled_at: 1795303266, claimed_count: 2, refunded: false }],
+      chain_more: false,
+    } as never);
+    vi.mocked(chainBill.compareIndexChain).mockReturnValueOnce([
+      'settlement 0 total_amount index=999 chain=20000',
+    ] as never);
+    vi.mocked(chainBill.readChainBill).mockResolvedValueOnce(FAKE_CHAIN as never);
+    const r = await getRoute(`?bill=${BILL}`);
+    expect(r.status).toBe(200);
+    expect(r.body.source).toBe('chain');
+    expect((r.body as Record<string, unknown>).integrity).toEqual({
+      status: 'DEFECT',
+      mismatches: ['settlement 0 total_amount index=999 chain=20000'],
+    });
+  });
+  it('OVERLAY-1: agreement passes through with integrity OK', async () => {
+    vi.mocked(fetch).mockImplementationOnce(async () =>
+      new Response(JSON.stringify({ bill: BILL, settlements: [], events: [], total_settlements: 0 }), { status: 200 }),
+    );
+    const r = await getRoute(`?bill=${BILL}`);
+    expect(r.body.integrity).toEqual({ status: 'OK' });
+  });
+  it('degrades to [] rows (200) when indexer AND chain are both unreachable', async () => {
     vi.mocked(fetch).mockImplementationOnce(async () => {
       throw new TypeError("fetch failed: ECONNREFUSED");
     });
