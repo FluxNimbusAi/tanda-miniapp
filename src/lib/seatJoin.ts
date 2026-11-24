@@ -8,8 +8,8 @@
 // bill+wallet legs, ADDR_RE = /^0x[a-fA-F0-9]{40}$/). An invalid pair must
 // never reach IDKit — the proof could not be granted, and a wasted single-use
 // nonce burns nothing but user trust.
-import { keccak256, toBytes } from 'viem';
-import { resolveConfirmAction } from './rpSignatureGuard';
+import { keccak256, toBytes } from "viem";
+import { resolveConfirmAction } from "./rpSignatureGuard";
 
 /** Registered RP action for seat joins. One action for all bills by design:
  *  the nullifier is deterministic per (rp_id, action), and the indexer's
@@ -41,7 +41,7 @@ const ADDRESS_RE = /^0x[a-fA-F0-9]{40}$/;
 /** Trim + full lowercase (also normalizes a 0X prefix) or null.
  *  Mirrors the server's ADDR_RE so client and server agree on acceptance. */
 export function normalizeAddress(a: string | null | undefined): string | null {
-  if (typeof a !== 'string') return null;
+  if (typeof a !== "string") return null;
   const s = a.trim().toLowerCase();
   return ADDRESS_RE.test(s) ? s : null;
 }
@@ -78,4 +78,49 @@ export function buildSeatVerifyProofBody(args: {
     bill: args.bill,
     wallet: args.wallet,
   };
+}
+
+/* ── BRIDGE-2 (t_a9f67ed4): portal-verified grants -> on-chain seat burn ────
+ * Pure, DOM-free, golden-pinned like every other seat-join leg.
+ * A grant counts as REAL only with a 66-hex nullifier (the indexer's
+ * seat_grants values); chain-synthesized placeholders (chain:seat:N) are
+ * excluded by shape - never by guess. Pending = verified, not yet an
+ * on-chain seat. Signal bytes are the frozen canonical binding:
+ * `${bill.toLowerCase()}:${wallet.toLowerCase()}` (same string the proof
+ * was minted for; verify-proof enforced its keccak before writing).
+ */
+const HEX64_RE = /^0x[0-9a-fA-F]{64}$/;
+const ADDR_RE = /^0x[0-9a-fA-F]{40}$/;
+
+export type GrantFeed = Record<
+  string,
+  { nullifier?: string; verified_at?: string | number }
+>;
+
+export function pendingOnChainGrants(
+  grants: GrantFeed,
+  onChainSeats: { wallet: string; active: boolean }[],
+  bill: string,
+): { wallet: `0x${string}`; nullifier: `0x${string}`; signal: string }[] {
+  const seated = new Set(
+    onChainSeats.filter((s) => s.active).map((s) => s.wallet.toLowerCase()),
+  );
+  const billL = bill.toLowerCase();
+  const out: {
+    wallet: `0x${string}`;
+    nullifier: `0x${string}`;
+    signal: string;
+  }[] = [];
+  for (const [walletRaw, g] of Object.entries(grants)) {
+    const wallet = walletRaw.toLowerCase();
+    if (!ADDR_RE.test(wallet)) continue;
+    if (!g?.nullifier || !HEX64_RE.test(g.nullifier)) continue; // placeholders out
+    if (seated.has(wallet)) continue; // already burned on-chain
+    out.push({
+      wallet: wallet as `0x${string}`,
+      nullifier: g.nullifier as `0x${string}`,
+      signal: `${billL}:${wallet}`,
+    });
+  }
+  return out.sort((a, b) => (a.wallet < b.wallet ? -1 : 1));
 }
