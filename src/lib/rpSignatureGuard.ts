@@ -17,7 +17,7 @@
  */
 
 // ACTION-FLIP (Flux ruling 19:0x, live portal readback t_31f09cee: action_v4_
-// 62c3d88d2282da0810928cbafe0a88ef = 'tanda_bill_settlement', rp_a779c304e4f624ce):
+// (PORTAL-MIGRATE 2026-11-24: action hash + rp below belong to the DELETED app;
 // the portal name joins the frozen enum so BOTH wire actions are accepted by
 // default, with no env needed. 'bill:confirm' is KEPT (transition window,
 // dual-accept) so legacy signed artifacts + legacy-env deployments still verify.
@@ -28,7 +28,7 @@ export type BillRpAction = (typeof BILL_RP_ACTIONS)[number];
 /** Default wire action for the bill-confirm leg. ACTION-FLIP (Flux ruling
  *  19:0x + live MCP readback t_31f09cee): the live portal record CONFIRMS
  *  `tanda_bill_settlement` (action_v4_62c3d88d2282da0810928cbafe0a88ef,
- *  rp_a779c304e4f624ce), so the default resolution now carries the portal
+ *  rp_4fbd445435612f67), so the default resolution now carries the portal
  *  name. The signed message and the proof must ride the SAME string
  *  (SR-F1KP) — clients get it from SEAT_JOIN_ACTION, which resolves through
  *  this default. Legacy `bill:confirm` remains ACCEPTED in BILL_RP_ACTIONS

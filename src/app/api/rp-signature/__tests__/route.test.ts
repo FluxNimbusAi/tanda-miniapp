@@ -142,7 +142,7 @@ describe('rp-signature DEFAULT RP (PORTAL-RECON, Flux ruling 4)', () => {
     const data = (await res.json()) as Record<string, unknown>;
     // Byte pin by design: LITERAL, not the constant — if PORTAL_RP_ID drifts
     // off the portal record this golden must FAIL, not silently follow.
-    expect(data.rp_id).toBe('rp_a779c304e4f624ce');
+    expect(data.rp_id).toBe('rp_4fbd445435612f67');
   });
 });
 

@@ -34,7 +34,7 @@ const VITALIK_EIP55 = "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045";
 // below stays a byte-exact LITERAL so any anchor drift fails the suite.
 const APP_ID = PORTAL_APP_ID;
 const GOLDEN_URL =
-  "https://world.org/mini-app?app_id=app_e691f66620f3537878f639160a0e31f7" +
+  "https://world.org/mini-app?app_id=app_d3f03e8bce15b7c4580069bf4ea882c2" +
   `&path=%2Fbill%2F${VITALIK_EIP55}`;
 
 const shareMock = vi.mocked(MiniKit.share) as unknown as ReturnType<

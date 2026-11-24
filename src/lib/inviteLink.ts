@@ -13,7 +13,7 @@
 import { getAddress, isAddress, type Address } from 'viem';
 
 /** World developer-portal app ids are `app_` + opaque alphanumerics
- *  (live sample: app_e691f66620f3537878f639160a0e31f7, m4_hosting E5).
+ *  (canonical anchor: PORTAL_APP_ID via portalAnchors; m4_hosting E5 era).
  *  Bounded regex guards a malformed env from ever reaching a share sheet. */
 export const WORLD_APP_ID_RE = /^app_[A-Za-z0-9]{8,64}$/;
 

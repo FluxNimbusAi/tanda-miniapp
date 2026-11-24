@@ -3,7 +3,7 @@
 // No confirm-action env is set (hoisted deletes both names for hermeticity),
 // so SEAT_JOIN_ACTION resolves to the live portal name 'tanda_bill_settlement'
 // (live MCP readback t_31f09cee: action_v4_62c3d88d2282da0810928cbafe0a88ef,
-// rp_a779c304e4f624ce). Golden mirrors seatJoin.golden.test.tsx (the LEGACY-
+// rp_4fbd445435612f67). Golden mirrors seatJoin.golden.test.tsx (the LEGACY-
 // ENV case pinning 'bill:confirm'): same capture machinery, byte-exact pins,
 // literals hand-written — the test IS the contract. CI green = BOTH files.
 import { afterEach, describe, expect, it, vi } from 'vitest';

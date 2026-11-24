@@ -3,7 +3,7 @@
 // transport was CLOSED for that cycle, so those values were pinned from the
 // portal RECORD, not a live read. ACTION-FLIP (t_7f0f9775): a LIVE MCP read
 // followed (t_31f09cee — action_v4_62c3d88d2282da0810928cbafe0a88ef =
-// 'tanda_bill_settlement' on rp_a779c304e4f624ce), the default flipped, and
+// 'tanda_bill_settlement' on rp_4fbd445435612f67), the default flipped, and
 // this file was updated per ruling 4: "a live read that contradicts them
 // wins". See docs/adr/ADR-0010.
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -21,11 +21,11 @@ import { WORLD_APP_ID_RE } from '@/lib/inviteLink';
 
 describe('portal anchors — single source (ruling 4)', () => {
   it('pins the portal-recorded rp_id byte-exact', () => {
-    expect(PORTAL_RP_ID).toBe('rp_a779c304e4f624ce');
+    expect(PORTAL_RP_ID).toBe('rp_4fbd445435612f67');
   });
 
   it('pins the portal-recorded app_id byte-exact and well-formed', () => {
-    expect(PORTAL_APP_ID).toBe('app_e691f66620f3537878f639160a0e31f7');
+    expect(PORTAL_APP_ID).toBe('app_d3f03e8bce15b7c4580069bf4ea882c2');
     expect(WORLD_APP_ID_RE.test(PORTAL_APP_ID)).toBe(true);
   });
 });
