@@ -32,6 +32,7 @@ import {
 } from "@/lib/worldUsernames";
 import { SettlementVectorTable } from "@/components/SettlementVector";
 import { NudgeCountdown } from "@/components/NudgeCountdown";
+import { EmptyState } from "@/components/EmptyState";
 import { nudgeStatus } from "@/lib/nudgeStatus";
 import {
   buildSettlementVector,
@@ -392,6 +393,9 @@ export const TandaBill = ({
   const handledSeqRef = useRef(0);
   const [status, setStatus] = useState<string>("");
   const [billAddr, setBillAddr] = useState<Address | null>(null);
+  // BS-4.1: empty-state gate — a brand-new user sees the pull-to-first-value
+  // screen; one tap reveals the create form (spec §5: create in ≤3 taps).
+  const [createRevealed, setCreateRevealed] = useState(false);
   const [snap, setSnap] = useState<BillSnapshot | null>(null);
   const [seats, setSeats] = useState<SeatRow[]>([]);
   // BRIDGE-2 (t_a9f67ed4): portal-verified grants awaiting the on-chain burn.
@@ -844,6 +848,16 @@ const SEAT_BURN_ENABLED = process.env.NEXT_PUBLIC_SEAT_BURN === "1";
   const unverifiedCount = seats.filter((s) => s.verified === false).length;
   const unknownCount = seats.filter((s) => s.verified == null).length;
   const confirmedCount = seats.filter((s) => s.confirmed).length;
+
+  // BS-4.1 / UX3-#9: empty state never shows once a bill exists or is in
+  // flight (spec §5 state-gate); it collapses the dev-grade control block.
+  if (state === "idle" && !billAddr && !snap && !createRevealed) {
+    return (
+      <div className="grid w-full gap-4 rounded-xl border p-4">
+        <EmptyState onCreate={() => setCreateRevealed(true)} />
+      </div>
+    );
+  }
 
   return (
     <div className="grid w-full gap-4 rounded-xl border p-4">
