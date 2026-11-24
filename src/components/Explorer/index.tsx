@@ -1,4 +1,4 @@
-'use client';
+"use client";
 // W2.5-3 (t_14b21fee): Read-Only Live Explorer — the browser-facing product
 // view for GitHub visitors (owner brief + Flux rank4). Reads ONLY through the
 // app's own auth-free GET routes, which proxy the :8096 canonical indexer:
@@ -11,7 +11,7 @@
 //      no MiniKit command — nothing that could transact.
 //   2. GET-only network: this component never issues a mutating request.
 //   3. Degrade, never error: indexer down -> offline chips + friendly copy.
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from "react";
 
 type LiveStatus = {
   indexed?: boolean;
@@ -37,19 +37,21 @@ const ADDR_RE = /^0x[a-fA-F0-9]{40}$/;
 
 const fmtUSDC = (units: unknown): string => {
   const n = Number(units);
-  return Number.isFinite(n) ? `${(n / 1e6).toFixed(6)} USDC` : '\u2014';
+  return Number.isFinite(n) ? `${(n / 1e6).toFixed(6)} USDC` : "\u2014";
 };
 const short = (v: unknown): string => {
-  const s = String(v ?? '');
-  return s.length > 16 ? `${s.slice(0, 10)}\u2026${s.slice(-6)}` : s || '\u2014';
+  const s = String(v ?? "");
+  return s.length > 16
+    ? `${s.slice(0, 10)}\u2026${s.slice(-6)}`
+    : s || "\u2014";
 };
 // SR-003 precedence (golden contract in src/app/settlements):
 // refunded > executed > fully_confirmed > initiated.
 const deriveStatus = (r: Record<string, unknown>): string => {
-  if (Number(r.refunded ?? 0) > 0) return 'refunded';
-  if (r.tx_hash) return 'executed';
-  if (r.fully_confirmed_at) return 'fully_confirmed';
-  return 'initiated';
+  if (Number(r.refunded ?? 0) > 0) return "refunded";
+  if (r.tx_hash) return "executed";
+  if (r.fully_confirmed_at) return "fully_confirmed";
+  return "initiated";
 };
 
 const Chip = ({ label, value }: { label: string; value: string }) => (
@@ -60,15 +62,15 @@ const Chip = ({ label, value }: { label: string; value: string }) => (
 
 export const LiveExplorer = () => {
   const [status, setStatus] = useState<LiveStatus | null>(null);
-  const [bill, setBill] = useState('');
+  const [bill, setBill] = useState("");
   const [feed, setFeed] = useState<Feed | null>(null);
   const [seatCount, setSeatCount] = useState<number | null>(null);
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
 
   useEffect(() => {
     let alive = true;
-    fetch('/api/live-status')
+    fetch("/api/live-status")
       .then((r) => r.json())
       .then((b: LiveStatus) => {
         if (alive) setStatus(b);
@@ -84,12 +86,12 @@ export const LiveExplorer = () => {
   const lookup = useCallback(async (addr: string) => {
     const a = addr.toLowerCase();
     if (!ADDR_RE.test(a)) {
-      setError('Bill address must be 0x + 40 hex characters.');
+      setError("Bill address must be 0x + 40 hex characters.");
       setFeed(null);
       setSeatCount(null);
       return;
     }
-    setError('');
+    setError("");
     setPending(true);
     try {
       const [f, g] = (await Promise.all([
@@ -99,7 +101,7 @@ export const LiveExplorer = () => {
       setFeed(f);
       setSeatCount(Object.keys(g.grants ?? {}).length);
     } catch {
-      setError('Indexer unavailable \u2014 try again shortly.');
+      setError("Indexer unavailable \u2014 try again shortly.");
     } finally {
       setPending(false);
     }
@@ -107,7 +109,8 @@ export const LiveExplorer = () => {
 
   const rows = feed?.settlements ?? [];
   const events = feed?.events ?? [];
-  const indexerState = status === null ? '\u2026' : status.indexed ? 'live' : 'offline';
+  const indexerState =
+    status === null ? "\u2026" : status.indexed ? "live" : "offline";
 
   return (
     <main className="mx-auto flex min-h-dvh w-full max-w-2xl flex-col gap-6 px-6 py-10">
@@ -124,14 +127,57 @@ export const LiveExplorer = () => {
         </p>
       </header>
 
-      <section aria-label="Indexer status" className="flex flex-wrap gap-2 text-xs">
+      <section
+        aria-label="Indexer status"
+        className="flex flex-wrap gap-2 text-xs"
+      >
         <Chip label="indexer" value={indexerState} />
-        <Chip label="chain" value={status?.chain_id === undefined ? '\u2014' : String(status.chain_id)} />
-        <Chip label="bills indexed" value={status?.bills_indexed === undefined ? '\u2014' : String(status.bills_indexed)} />
-        <Chip label="bills resolved" value={status?.bills_resolved === undefined ? '\u2014' : String(status.bills_resolved)} />
-        <Chip label="settlements" value={status?.settlements === undefined ? '\u2014' : String(status.settlements)} />
-        <Chip label="seat grants" value={status?.seat_grants === undefined ? '\u2014' : String(status.seat_grants)} />
-        <Chip label="verifications" value={status?.verifications === undefined ? '\u2014' : String(status.verifications)} />
+        <Chip
+          label="chain"
+          value={
+            status?.chain_id === undefined ? "\u2014" : String(status.chain_id)
+          }
+        />
+        <Chip
+          label="bills indexed"
+          value={
+            status?.bills_indexed === undefined
+              ? "\u2014"
+              : String(status.bills_indexed)
+          }
+        />
+        <Chip
+          label="bills resolved"
+          value={
+            status?.bills_resolved === undefined
+              ? "\u2014"
+              : String(status.bills_resolved)
+          }
+        />
+        <Chip
+          label="settlements"
+          value={
+            status?.settlements === undefined
+              ? "\u2014"
+              : String(status.settlements)
+          }
+        />
+        <Chip
+          label="seat grants"
+          value={
+            status?.seat_grants === undefined
+              ? "\u2014"
+              : String(status.seat_grants)
+          }
+        />
+        <Chip
+          label="verifications"
+          value={
+            status?.verifications === undefined
+              ? "\u2014"
+              : String(status.verifications)
+          }
+        />
       </section>
 
       <form
@@ -153,7 +199,7 @@ export const LiveExplorer = () => {
           disabled={pending}
           className="rounded-lg bg-black px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
         >
-          {pending ? 'Loading\u2026' : 'Look up bill'}
+          {pending ? "Loading\u2026" : "Look up bill"}
         </button>
       </form>
       {error && (
@@ -168,7 +214,7 @@ export const LiveExplorer = () => {
             Settlements for {short(feed.bill)}
           </h2>
           <p className="text-xs opacity-60">
-            {feed.total_settlements ?? rows.length} settlement(s) \u00b7{' '}
+            {feed.total_settlements ?? rows.length} settlement(s) \u00b7{" "}
             {feed.total_events ?? events.length} lifecycle event(s)
             {seatCount !== null && ` \u00b7 ${seatCount} verified seat(s)`}
           </p>
@@ -191,11 +237,13 @@ export const LiveExplorer = () => {
                   {deriveStatus(r)}
                 </span>
               </div>
-              <p>Total escrowed: {fmtUSDC(r.total_amount)}</p>
+              <p className="tabular-nums">
+                Total escrowed: {fmtUSDC(r.total_amount)}
+              </p>
               {r.tx_hash ? <p>Execute tx: {String(r.tx_hash)}</p> : null}
               {r.claimed_count !== undefined && (
-                <p>
-                  Claimed: {String(r.claimed_count)} seat(s) \u00b7{' '}
+                <p className="tabular-nums">
+                  Claimed: {String(r.claimed_count)} seat(s) \u00b7{" "}
                   {fmtUSDC(r.claimed_amount)}
                 </p>
               )}
@@ -212,11 +260,13 @@ export const LiveExplorer = () => {
               <li key={i} className="flex flex-wrap gap-2">
                 <span className="tabular-nums opacity-60">#{i + 1}</span>
                 <span className="font-semibold">{String(ev.event)}</span>
-                <span className="opacity-70">
+                <span className="tabular-nums opacity-70">
                   block {String(ev.block)}
-                  {ev.seat_id != null ? ` \u00b7 seat ${String(ev.seat_id)}` : ''}
-                  {ev.amount != null ? ` \u00b7 ${fmtUSDC(ev.amount)}` : ''} \u00b7 tx{' '}
-                  {short(ev.tx_hash)}
+                  {ev.seat_id != null
+                    ? ` \u00b7 seat ${String(ev.seat_id)}`
+                    : ""}
+                  {ev.amount != null ? ` \u00b7 ${fmtUSDC(ev.amount)}` : ""}{" "}
+                  \u00b7 tx {short(ev.tx_hash)}
                 </span>
               </li>
             ))}
@@ -224,9 +274,11 @@ export const LiveExplorer = () => {
         </section>
       )}
 
-      <footer className="mt-auto text-xs opacity-50">
+      {/* DEF-4 [t_1d9b5038]: World mini-app rule — no footer element; the
+          read-only disclaimer lives inline at the end of the page flow. */}
+      <p className="mt-auto text-xs opacity-50">
         Public read-only view \u2014 nothing here can move funds.
-      </footer>
+      </p>
     </main>
   );
 };

@@ -26,7 +26,7 @@ export const SettlementVectorTable = ({
         Settlement #{vector.settlementId.toString()} — who receives what
       </p>
       <table className="w-full text-xs">
-        <caption className="text-left opacity-70">
+        <caption className="text-left tabular-nums opacity-70">
           Payout vector of {n} seat{n === 1 ? "" : "s"}. Total{" "}
           {vector.totalAmount.toString()} units (
           {formatUnits6(vector.totalAmount)} USDC, {vector.scale} decimals)
@@ -72,10 +72,16 @@ export const SettlementVectorTable = ({
               >
                 {short(c.wallet)}
               </td>
-              <td aria-describedby={`sv-explain-${c.seatId}`}>
+              <td
+                aria-describedby={`sv-explain-${c.seatId}`}
+                className="tabular-nums"
+              >
                 {formatUnits6(c.payout)}
               </td>
-              <td id={`sv-explain-${c.seatId}`} className="opacity-70">
+              <td
+                id={`sv-explain-${c.seatId}`}
+                className="tabular-nums opacity-70"
+              >
                 rank {c.rank}: {formatUnits6(c.derivation.base)} +{" "}
                 {c.derivation.getsRemainderUnit ? "1" : "0"} leftover unit
                 {c.derivation.getsRemainderUnit ? "" : "s"}
@@ -88,7 +94,7 @@ export const SettlementVectorTable = ({
       {vector.expenseTrace.length > 0 && (
         <ul className="text-xs opacity-70">
           {vector.expenseTrace.map((e) => (
-            <li key={e.id}>
+            <li key={e.id} className="tabular-nums">
               expense #{e.id}: {formatUnits6(e.amount)} USDC paid by{" "}
               {short(e.paidBy)}
             </li>
