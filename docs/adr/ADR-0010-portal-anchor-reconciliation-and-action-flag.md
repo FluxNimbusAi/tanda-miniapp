@@ -84,3 +84,20 @@ pure-env: pin BOTH legs to `bill:confirm`.
 Everything here is constant-level: revert the import swap in route.ts and the
 guard/seatJoin constants to restore the previous pins. No migration, no wire
 change, no state touched.
+
+---
+
+## Superseded in part — PORTAL-MIGRATE (owner ruling 2026-11-24)
+
+The app reconciled here (`app_e691f66620f3537878f639160a0e31f7`,
+`rp_a779c304e4f624ce`, signer `0xf4D12A74…`) was **deleted by the owner**: it
+lived on his personal World account. Canonical anchors are now the swarm
+account (valorcorp@agentmail.to custody): `app_d3f03e8bce15b7c4580069bf4ea882c2`,
+`rp_4fbd445435612f67`, signer `0x92CB245F55941979891477f47253623A463e5dCb`.
+The single-source mechanism (portalAnchors.ts) and the contradiction protocol
+designed here worked exactly as intended: the migration is a two-constant
+flip plus golden re-pins, no code logic changes. Portal obligations that died
+with the old app and MUST be re-created before production seat-gate works:
+(1) action `tanda_bill_settlement` on the new RP, (2) Contract Entrypoints
+(factory + USDC) on the new app, (3) fresh RP_SIGNING_KEY/WORLD_APP_SECRET
+via vault lane. Proofs minted under the old signer are void.

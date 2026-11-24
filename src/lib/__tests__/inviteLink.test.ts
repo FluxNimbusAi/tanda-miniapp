@@ -32,7 +32,7 @@ describe("inviteLink golden wire", () => {
 
   it("builds the exact universal deep link", () => {
     expect(buildBillInviteUrl(VITALIK_LOWER as `0x${string}`, APP_ID)).toBe(
-      "https://world.org/mini-app?app_id=app_e691f66620f3537878f639160a0e31f7" +
+      "https://world.org/mini-app?app_id=app_d3f03e8bce15b7c4580069bf4ea882c2" +
         `&path=%2Fbill%2F${VITALIK_EIP55}`,
     );
   });
