@@ -79,7 +79,7 @@ export const ConfirmPreview = ({
           type="button"
           data-testid="cancel-sign"
           onClick={onCancel}
-          className="rounded-[14px] px-4 py-2.5 text-sm font-semibold text-[#8b90a3]"
+          className="rounded-[14px] px-4 py-2.5 text-sm font-semibold text-[#a7adc0]"
         >
           Cancel
         </button>
