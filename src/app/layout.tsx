@@ -19,6 +19,21 @@ export const metadata: Metadata = {
   title: 'Tanda — proof-escrow settlement between provably-unique humans',
   description:
     'Settled by contract, not trust: every seat is a World ID, every payout a pull-claim on-chain receipt. Group bills run the same escrow law — USDC from day one, zero fees, no custody.',
+  // QUALITY WAVE 1 (I2): link previews + canonical identity. OG image reuses
+  // the brand icon until a designed card ships (backlog I-list #14); honest
+  // copy law applies to og:description exactly as to <title>.
+  openGraph: {
+    title: 'TandaBill — escrowed settlement between verified humans',
+    description:
+      'Every seat is a World ID. Every payout is an on-chain pull-claim. USDC escrow from day one.',
+    url: 'https://tanda-miniapp.vercel.app',
+    siteName: 'TandaBill',
+    type: 'website',
+    images: [{ url: '/icon-512.png', width: 512, height: 512, alt: 'TandaBill mark' }],
+  },
+  twitter: { card: 'summary_large_image', title: 'TandaBill', description: 'Escrowed settlement between verified humans.' },
+  icons: { icon: '/favicon.ico', apple: '/icon-192.png' },
+  manifest: '/manifest.webmanifest',
 };
 
 // SSR-SHELL (V5 audit card 1, white-screen kill): an unbounded `await auth()`
