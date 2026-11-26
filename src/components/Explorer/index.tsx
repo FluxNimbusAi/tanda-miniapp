@@ -11,6 +11,7 @@
 //      no MiniKit command — nothing that could transact.
 //   2. GET-only network: this component never issues a mutating request.
 //   3. Degrade, never error: indexer down -> offline chips + friendly copy.
+import { formatUnits6 } from "@/lib/settlementVector";
 import { useCallback, useEffect, useState } from "react";
 
 type LiveStatus = {
@@ -37,7 +38,14 @@ const ADDR_RE = /^0x[a-fA-F0-9]{40}$/;
 
 const fmtUSDC = (units: unknown): string => {
   const n = Number(units);
-  return Number.isFinite(n) ? `${(n / 1e6).toFixed(6)} USDC` : "—";
+// QUALITY WAVE 1 (I4): was (n/1e6).toFixed(6) => "12.500000 USDC" false
+    // precision, diverging from SettlementVector's canonical formatUnits6.
+    // Same law, one implementation: delegate, then trim decorative zeros for
+    // display only (chain value untouched).
+    if (!Number.isFinite(n)) return "—";
+    const raw = formatUnits6(BigInt(Math.round(n)));
+    const trimmed = raw.includes(".") ? raw.replace(/0+$/, "").replace(/\.$/, "") : raw; // 12.500000 -> 12.5 ; 100.000000 -> 100 ; 100 -> 100 (no-dot path never trims)
+    return `${trimmed} USDC`;
 };
 const short = (v: unknown): string => {
   const s = String(v ?? "");

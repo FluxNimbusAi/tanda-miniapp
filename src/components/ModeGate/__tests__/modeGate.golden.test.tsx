@@ -207,7 +207,7 @@ describe('W2.5-3 dual-mode gate', () => {
     expect(screen.getByText('SettlementFullyConfirmed')).toBeInTheDocument();
     expect(screen.getByText('SettlementExecuted')).toBeInTheDocument();
     expect(screen.getByText('executed')).toBeInTheDocument();
-    expect(screen.getAllByText(/0\.020000 USDC/).length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText(/0\.02 USDC/).length).toBeGreaterThanOrEqual(2);
     expect(screen.getByText(/2 verified seat\(s\)/)).toBeInTheDocument();
     // Bill is lowercased before hitting the read routes.
     expect(
