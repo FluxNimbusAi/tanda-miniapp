@@ -3,6 +3,7 @@
 // transport was CLOSED for that cycle, so those values were pinned from the
 // portal RECORD, not a live read. ACTION-FLIP (t_7f0f9775): a LIVE MCP read
 // followed (t_31f09cee — action_v4_62c3d88d2282da0810928cbafe0a88ef =
+// SUPERSEDED 2026-11-26 by rotation ids 590146b1/staging + d9aa3f47/prod;
 // 'tanda_bill_settlement' on rp_4fbd445435612f67), the default flipped, and
 // this file was updated per ruling 4: "a live read that contradicts them
 // wins". See docs/adr/ADR-0010.

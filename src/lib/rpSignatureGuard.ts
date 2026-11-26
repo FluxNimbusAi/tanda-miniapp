@@ -29,6 +29,11 @@ export type BillRpAction = (typeof BILL_RP_ACTIONS)[number];
  *  19:0x + live MCP readback t_31f09cee): the live portal record CONFIRMS
  *  `tanda_bill_settlement` (action_v4_62c3d88d2282da0810928cbafe0a88ef,
  *  rp_4fbd445435612f67), so the default resolution now carries the portal
+ *  NOTE 2026-11-26 ROTATION: action NAME unchanged; ids re-issued by World -
+ *  staging action_v4_590146b1a650eebd839820b8449d3546, production
+ *  action_v4_d9aa3f475a9ccbd8f18aed936380f924 (Flux create_world_id_action).
+ *  Code resolves by NAME only; no id literals exist in this repo (verified
+ *  by grep 2026-11-26), so rotation required zero logic change. (SR-F1KP)
  *  name. The signed message and the proof must ride the SAME string
  *  (SR-F1KP) — clients get it from SEAT_JOIN_ACTION, which resolves through
  *  this default. Legacy `bill:confirm` remains ACCEPTED in BILL_RP_ACTIONS
