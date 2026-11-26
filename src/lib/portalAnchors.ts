@@ -10,7 +10,13 @@
 // it lived on the owner's PERSONAL World account. Canonical is now the
 // swarm-accessible account (valorcorp@agentmail.to custody): app_id
 // app_d3f03e8bce15b7c4580069bf4ea882c2, rp_id rp_4fbd445435612f67,
-// signer 0x92CB245F55941979891477f47253623A463e5dCb. Portal obligations
+// signer superseded 2026-11-26T07:31Z by Flux via Developer Portal MCP
+// (rotate_world_id_signing_key): NEW signer 0xaB7dFA7a9DB86bcf78EA0E468862F9A5ed6Ff228,
+// old 0x92CB245F55941979891477f47253623A463e5dCb RETIRED (pre-rotation key was
+// unrecoverable null - that is why the rotation existed). Live MCP read
+// (Nimbus, T+6m): registered=true/true, synced=false/false - registration sync
+// pending on World's side; verify legs must NOT go production until synced
+// flips (reconciliation card: Nimbus delta-read proc_6c26bebbcb08). Portal obligations
 // that died with the old app and MUST be re-created there: action
 // 'tanda_bill_settlement', Contract Entrypoints (factory + USDC), and the
 // RP_SIGNING_KEY/WORLD_APP_SECRET env pair (values via vault lane only).
