@@ -3,7 +3,13 @@
 // the real POST handler is enough — no module resets, no HTTP server.
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { POST } from '../route';
+// House solution (copied from notify suite, 11-16): @/auth statically pulls
+// next-auth -> 'next/server', unresolvable in vitest node env. Mock to
+// auth()=>null — session path is inert here; internal-bearer + 401 goldens
+// exercise the gate for real.
+vi.mock('@/auth', () => ({ auth: async () => null }));
+
+import { POST, __resetRpRateLimitForTesting } from '../route';
 import {
   BILL_RP_ACTIONS,
   getRpDenyStats,
@@ -18,9 +24,12 @@ const TEST_SIGNING_KEY =
 const TEST_RP_ID = 'rp_test_allowlist';
 
 function post(body: BodyInit): Request {
+  // C1: route now enforces house auth law (session OR internal bearer).
+  // Test lane authenticates as internal; dedicated 401/429 goldens below.
   return new Request('http://localhost/api/rp-signature', {
     method: 'POST',
     body,
+    headers: { authorization: 'Bearer test-internal-key' },
   });
 }
 
@@ -33,6 +42,8 @@ let warnLines: string[] = [];
 beforeEach(() => {
   process.env.RP_SIGNING_KEY = TEST_SIGNING_KEY;
   process.env.RP_ID = TEST_RP_ID;
+  process.env.RP_INTERNAL_KEY = 'test-internal-key';
+  __resetRpRateLimitForTesting();
   resetRpDenyStats();
   warnLines = [];
   vi.spyOn(console, 'warn').mockImplementation((...args: unknown[]) => {
@@ -164,5 +175,53 @@ describe('guard unit behavior', () => {
     expect(out.length).toBeLessThanOrEqual(90);
     expect(out).toContain('+120');
     expect(out).not.toContain('\n');
+  });
+});
+
+// ==== QUALITY WAVE C1/C2 goldens (Flux [COMMAND] 57839) ====
+describe('C1 auth gate + limiter', () => {
+  it('401 on unauthenticated request carrying a valid action', async () => {
+    const res = await POST(
+      new Request('http://localhost/api/rp-signature', {
+        method: 'POST',
+        body: JSON.stringify({ action: 'bill:confirm' }),
+      }),
+    );
+    expect(res.status).toBe(401);
+  });
+  it('503 fail-closed when RP_INTERNAL_KEY unset', async () => {
+    const saved = process.env.RP_INTERNAL_KEY;
+    delete process.env.RP_INTERNAL_KEY;
+    const res = await POST(json({ action: 'tanda_bill_settlement' }));
+    expect(res.status).toBe(503);
+    process.env.RP_INTERNAL_KEY = saved;
+  });
+  it('429 after the 20/min window is spent for one IP', async () => {
+    let last = 200;
+    for (let i = 0; i < 24; i++) {
+      const r = new Request('http://localhost/api/rp-signature', {
+        method: 'POST',
+        body: JSON.stringify({ action: 'bill:confirm' }),
+        headers: { authorization: 'Bearer test-internal-key', 'x-forwarded-for': '203.0.113.9' },
+      });
+      last = (await POST(r)).status;
+    }
+    expect(last).toBe(429);
+  });
+});
+
+describe('C2 voided-anchor coercion', () => {
+  it('VOIDED env RP_ID coerces to canonical and warns', async () => {
+    const saved = process.env.RP_ID;
+    process.env.RP_ID = 'rp_a779c304e4f624ce';
+    const res = await POST(json({ action: 'tanda_bill_settlement' }));
+    const body = await res.json();
+    expect(body.rp_id).toBe('rp_4fbd445435612f67');
+    expect(warnLines.some((l) => l.includes('VOIDED'))).toBe(true);
+    process.env.RP_ID = saved;
+  });
+  it('unknown (test) anchors still pass through — blocklist, not allowlist', async () => {
+    const res = await POST(json({ action: 'bill:execute' }));
+    expect((await res.json()).rp_id).toBe(TEST_RP_ID);
   });
 });

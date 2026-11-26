@@ -1,3 +1,6 @@
+import { timingSafeEqual } from 'node:crypto';
+
+import { auth } from '@/auth';
 import { signRequest } from '@worldcoin/idkit/signing';
 import { NextResponse } from 'next/server';
 
@@ -21,6 +24,61 @@ export const runtime = 'nodejs';
 // Single source @/lib/portalAnchors — never re-literal this value.
 const DEFAULT_RP_ID = PORTAL_RP_ID;
 
+// C1 (Flux COMMAND 57839, signing-oracle close): the action enum was the ONLY
+// gate — 12/12 unauthenticated POSTs minted live signatures on production.
+// Same house auth law as /api/notify (session OR internal bearer), separate
+// key by least-privilege. RP_INTERNAL_KEY unset = fail-closed (503), never
+// "no key configured means allow all".
+async function authorize(req: Request): Promise<'session' | 'internal' | null> {
+  const internalKey = process.env.RP_INTERNAL_KEY;
+  const bearer = req.headers.get('authorization') ?? '';
+  if (internalKey) {
+    const got = bearer.startsWith('Bearer ') ? bearer.slice(7) : '';
+    const a = Buffer.from(got), b = Buffer.from(internalKey);
+    if (a.length === b.length && timingSafeEqual(a, b)) return 'internal';
+  }
+  try {
+    const session = await auth();
+    if (session?.user?.walletAddress) return 'session';
+  } catch {
+    /* fall through to 401 */
+  }
+  return null;
+}
+
+// C1 limiter: in-memory sliding window per IP (dev-lane parity with notify's
+// dedupe-map pattern). Edge-instance reset on cold start is acceptable while
+// the auth gate is the real wall; DB-backed counters at scale = logged backlog.
+const WINDOW_MS = 60_000;
+const LIMIT = 20;
+const hits = new Map<string, number[]>();
+/** Test seam: clears sliding-window state between suites. Not for runtime use. */
+export function __resetRpRateLimitForTesting(): void {
+  hits.clear();
+}
+
+function rateLimited(ip: string): boolean {
+  const now = Date.now();
+  const arr = (hits.get(ip) ?? []).filter((t) => now - t < WINDOW_MS);
+  arr.push(now);
+  hits.set(ip, arr);
+  return arr.length > LIMIT;
+}
+
+// C2 (voided-anchor coercion): production env carries rp_a779c304e4f624ce,
+// an id VOIDED by ADR-0011/0012 — the env layer overrode a correct code
+// default. A-voided (blocklist) keeps unknown/test anchors usable while
+// making DEAD ids runtime-unreachable: they coerce to canonical + warn.
+const VOIDED_RP_IDS = new Set(['rp_a779c304e4f624ce', 'rp_e87d44dbb7b76d91']);
+function resolveRpId(): string {
+  const env = process.env.RP_ID;
+  if (env && VOIDED_RP_IDS.has(env)) {
+    console.warn(`rp-signature: env RP_ID ${env} is VOIDED per ADR-0012; coercing to canonical ${PORTAL_RP_ID}`);
+    return PORTAL_RP_ID;
+  }
+  return env ?? DEFAULT_RP_ID;
+}
+
 /**
  * W2-F2: server-side action allowlist. This endpoint holds the RP signing
  * key — it must sign ONLY the TandaBill protocol actions (`bill:confirm`,
@@ -33,7 +91,26 @@ const DEFAULT_RP_ID = PORTAL_RP_ID;
  */
 export async function POST(req: Request) {
   const signingKey = process.env.RP_SIGNING_KEY;
-  const rpId = process.env.RP_ID ?? DEFAULT_RP_ID;
+  const rpId = resolveRpId();
+
+  if (!process.env.RP_INTERNAL_KEY) {
+    return NextResponse.json(
+      { error: 'RP_INTERNAL_KEY not configured - signing endpoint fail-closed' },
+      { status: 503 },
+    );
+  }
+  if (!(await authorize(req))) {
+    recordRpDeny('unauthenticated', undefined);
+    return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+  }
+  const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'local';
+  if (rateLimited(ip)) {
+    recordRpDeny('rate_limited', undefined);
+    return NextResponse.json(
+      { error: 'rate limit exceeded' },
+      { status: 429, headers: { 'Retry-After': '60' } },
+    );
+  }
 
   if (!signingKey) {
     return NextResponse.json(
