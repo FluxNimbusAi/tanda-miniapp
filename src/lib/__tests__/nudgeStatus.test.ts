@@ -8,6 +8,7 @@ import {
   nudgeLabel,
   nudgeStatus,
   type NudgeSnap,
+  type NudgeStatusKind,
 } from '@/lib/nudgeStatus';
 
 const T = 1_800_000_000; // fixed "now" (chain-clock probe result)
@@ -32,9 +33,12 @@ describe('nudgeStatus — landing mirrors the push clock (spec §3)', () => {
   it('N2 window: +20h into a 72h hold → refund-countdown, 52h left', () => {
     const st = nudgeStatus(snap({ initiatedAt: BigInt(T - 20 * H) }), T)!;
     expect(st).toEqual({ kind: 'refund-countdown', remainingSec: 52 * H });
-    // exact N2b sentence the engine pushed
+    // KAIZEN-2 phase-honest copy: door language + money rule first.
+    // (Engine push-string mirror rides a separate tanda branch — deliberate
+    // divergence from the old "escrow auto-refunds" sentence, which lied:
+    // nothing auto-runs; the refund door merely opens.)
     expect(nudgeLabel(st)).toBe(
-      'Settlement expires in 52h — confirm now or escrow auto-refunds',
+      'Confirm now — cancel-early returns the escrow in full until the refund door opens in 52h',
     );
   });
 
@@ -65,7 +69,7 @@ describe('nudgeStatus — landing mirrors the push clock (spec §3)', () => {
       fullyConfirmedAt: BigInt(T - 30 * 60),
     }), T)!;
     expect(st).toEqual({ kind: 'execute-countdown', remainingSec: 30 * 60 });
-    expect(nudgeLabel(st)).toBe('All seats confirmed — settlement executes in ~30m');
+    expect(nudgeLabel(st)).toBe('All seats signed — settlement unlocks in ~30m, then anyone can execute');
   });
 
   it('window elapsed → executable with the verbatim N3a push copy', () => {
@@ -75,8 +79,30 @@ describe('nudgeStatus — landing mirrors the push clock (spec §3)', () => {
     }), T)!;
     expect(st).toEqual({ kind: 'executable', remainingSec: null });
     expect(nudgeLabel(st)).toBe(
-      'All seats confirmed — settlement is ready. One tap to open payouts.',
+      'Settlement is unlocked — one tap executes. Payouts split per the signed vector.',
     );
+  });
+
+  it('phase honesty: no chip copy may promise automatic movement (KAIZEN-2)', () => {
+    // The old N2b/N3a sentences said "auto-refunds" / "executes in ~45m".
+    // Services grep proved zero auto-callers, so chip copy is banned from
+    // will/auto language and from the retired "confirmed" noun.
+    const kinds: Array<[NudgeStatusKind, number | null, string]> = [
+      ['refund-countdown', 52 * H, 'Confirm now — cancel-early returns the escrow in full until the refund door opens in 52h'],
+      ['refund-horizon', 0, 'Last call: the refund door is open — the escrow returns to the funder in full and anyone can call it. Seats can still settle.'],
+      ['execute-countdown', 30 * 60, 'All seats signed — settlement unlocks in ~30m, then anyone can execute'],
+      ['executable', null, 'Settlement is unlocked — one tap executes. Payouts split per the signed vector.'],
+    ];
+    for (const [kind, remainingSec, expected] of kinds) {
+      // Canonical form (no usdc passed) — escrow renders as 'the escrow'.
+      const label = nudgeLabel({ kind, remainingSec });
+      expect(label).toBe(expected);
+      expect(label).not.toMatch(/auto/i);
+      expect(label).not.toMatch(/\bconfirmed\b/i);
+    }
+    // Amount threading: when the app knows the figure, it lands in the rule.
+    expect(nudgeLabel({ kind: 'refund-countdown', remainingSec: 52 * H }, '12.5'))
+      .toContain('12.5 USDC');
   });
 
   it('terminal states stay silent even with stale timers (engine §6 cases 1–2)', () => {
