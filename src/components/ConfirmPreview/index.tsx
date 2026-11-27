@@ -18,6 +18,7 @@ const VERBS: Record<string, string> = {
   initiateSettlement: "Open a settlement round for this bill",
   confirmSettlement: "Confirm the current settlement payout vector",
   executeSettlement: "Release payouts to every seat",
+  claimSettlement: "Pull your share out of settled bill payouts",
   refundSettlement: "Refund the escrow back to the payer",
   rotateSeatWallet: "Move your seat to a new wallet",
 };
