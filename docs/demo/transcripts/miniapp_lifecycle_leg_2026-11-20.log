@@ -1,0 +1,12 @@
+P-A lifecycle e2e — MOCK mode (golden path shared with hook + unit test)
+  ok   relayer-fail sequence pending,failed
+  ok   failure names stuckAt=relayer
+  ok   stuckMessage names the stage: Stuck at relayer: relayer reported failure: relayer dropped op (mock)
+  ok   GOLDEN three-state sequence after retry: pending,mined,indexed
+  ok   terminal at indexed
+  ok   tx+bill landed from lanes
+  ok   caption confirms full landing: mined + indexed — fully landed
+  ok   demo lane terminates at mined
+  ok   indexedNa honest (no fake indexed tick)
+lifecycle_leg: PASS (114ms)
+EXIT=0
