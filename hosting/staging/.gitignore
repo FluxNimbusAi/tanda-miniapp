@@ -1,2 +1,0 @@
-# throwaway TLS material — never commit keys, even self-signed localhost ones
-certs/
