@@ -49,14 +49,20 @@ describe("/bill/[address] shell (C4)", () => {
   it("valid address: chip + address + trail region", async () => {
     const ui = await BillProfile({ params: Promise.resolve({ address: A }) });
     render(ui as never);
-    expect(screen.getByTestId("testnet-chip").textContent).toContain("not real funds");
+    expect(screen.getByTestId("testnet-chip").textContent).toContain(
+      "not real funds",
+    );
     expect(screen.getByTestId("bill-profile").textContent).toContain(A);
     expect(screen.getByTestId("trail-region")).toBeTruthy();
   });
   it("invalid address: honest error copy, no fabricated trail", async () => {
-    const ui = await BillProfile({ params: Promise.resolve({ address: "0xnope" }) });
+    const ui = await BillProfile({
+      params: Promise.resolve({ address: "0xnope" }),
+    });
     render(ui as never);
-    expect(screen.getByTestId("invalid-address").textContent).toContain("not a valid wallet");
+    expect(screen.getByTestId("invalid-address").textContent).toContain(
+      "not a valid wallet",
+    );
     expect(screen.queryByTestId("trail-region")).toBeNull();
   });
 });
@@ -66,25 +72,37 @@ describe("/bill/[address] invite shell (ENGINE-52 fold of W2.5-4)", () => {
     // auth mock returns null (signed-out) — page must render trail AND shell.
     const ui = await BillProfile({ params: Promise.resolve({ address: A }) });
     render(ui as never);
-    expect(screen.getByTestId("tandabill-shell").getAttribute("data-bill")).toBe(A);
-    expect(screen.getByTestId("settlement-timeline").getAttribute("data-bill")).toBe(A);
-    expect(screen.getByTestId("testnet-chip").textContent).toContain("not real funds");
+    expect(
+      screen.getByTestId("tandabill-shell").getAttribute("data-bill"),
+    ).toBe(A);
+    expect(
+      screen.getByTestId("settlement-timeline").getAttribute("data-bill"),
+    ).toBe(A);
+    expect(screen.getByTestId("testnet-chip").textContent).toContain(
+      "not real funds",
+    );
   });
   it("broken checksum: honest trail, malformed-invite copy, NO shell probe", async () => {
     const ui = await BillProfile({
       params: Promise.resolve({ address: BAD_CHECKSUM }),
     });
     render(ui as never);
-    expect(screen.getByTestId("bill-deeplink-invalid").textContent).toContain("malformed");
+    expect(screen.getByTestId("bill-deeplink-invalid").textContent).toContain(
+      "malformed",
+    );
     expect(screen.queryByTestId("tandabill-shell")).toBeNull();
-    expect(screen.getByTestId("testnet-chip").textContent).toContain("not real funds");
+    expect(screen.getByTestId("testnet-chip").textContent).toContain(
+      "not real funds",
+    );
   });
   it("percent-encoded path parses to the shell (decode-tolerant lane)", async () => {
     const ui = await BillProfile({
       params: Promise.resolve({ address: "%30x" + A.slice(2) }),
     });
     render(ui as never);
-    expect(screen.getByTestId("tandabill-shell").getAttribute("data-bill")).toBe(A);
+    expect(
+      screen.getByTestId("tandabill-shell").getAttribute("data-bill"),
+    ).toBe(A);
     expect(screen.getByTestId("bill-profile").textContent).toContain(A);
   });
   it("auth() rejection fails open — chrome hidden, public page intact", async () => {
@@ -93,5 +111,53 @@ describe("/bill/[address] invite shell (ENGINE-52 fold of W2.5-4)", () => {
     render(ui as never);
     expect(screen.getByTestId("tandabill-shell")).toBeTruthy();
     expect(screen.getByTestId("trail-region")).toBeTruthy();
+  });
+});
+
+// KAIZEN-1 (t_2eefc765, finding H1) — invite context params on the SAME
+// public page: banner renders from sanitized who/amount, hostile params
+// never render and never retarget the internal link, and the no-params
+// visit stays byte-identical to the ENGINE-52 fold.
+describe("/bill/[address] KAIZEN-1 invite context (amount/who/redirect)", () => {
+  it("who+amount render the pre-indexer invite banner (wire-encoded who)", async () => {
+    const ui = await BillProfile({
+      params: Promise.resolve({ address: A }),
+      searchParams: Promise.resolve({
+        who: "%40walters",
+        amount: "12.5",
+        redirect: `/bill/${A}`,
+      }),
+    });
+    render(ui as never);
+    const banner = screen.getByTestId("invite-context");
+    expect(banner.textContent).toContain("@walters invited you");
+    expect(banner.textContent).toContain("12.5 USDC in escrow");
+    // chip law survives every render path
+    expect(screen.getByTestId("testnet-chip").textContent).toContain(
+      "not real funds",
+    );
+    expect(screen.getByTestId("open-tandabill").getAttribute("href")).toBe(
+      `/bill/${A}`,
+    );
+  });
+  it("hostile params fail closed: no banner, link stays on /", async () => {
+    const ui = await BillProfile({
+      params: Promise.resolve({ address: A }),
+      searchParams: Promise.resolve({
+        who: "//evil",
+        amount: "1e9",
+        redirect: "javascript:alert(1)",
+      }),
+    });
+    render(ui as never);
+    expect(screen.queryByTestId("invite-context")).toBeNull();
+    expect(screen.getByTestId("open-tandabill").getAttribute("href")).toBe("/");
+    expect(screen.getByTestId("tandabill-shell")).toBeTruthy();
+  });
+  it("no searchParams: ENGINE-52 page byte-path unchanged, banner absent", async () => {
+    const ui = await BillProfile({ params: Promise.resolve({ address: A }) });
+    render(ui as never);
+    expect(screen.queryByTestId("invite-context")).toBeNull();
+    expect(screen.getByTestId("open-tandabill").getAttribute("href")).toBe("/");
   });
 });

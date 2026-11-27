@@ -17,12 +17,18 @@
 // No new state-machine surface: the component is unchanged apart from the
 // optional initialBill it already accepts (TandaBill/index.tsx auto-probe
 // lane, L380-381/L507-513).
+// KAIZEN-1 (t_2eefc765, finding H1): the invite link now also carries
+// ?amount/who/redirect; this page reads them through the fail-closed lane
+// (parseInviteParams) and shows a pre-indexer invite banner. A crafted link
+// can at worst paint sanitized display text; the redirect is never
+// auto-followed — it only retargets the same-origin "Open TandaBill" link.
 import { auth } from "@/auth";
 import Link from "next/link";
 import type { Metadata } from "next";
 import { Page } from "@/components/PageLayout";
 import { TandaBill } from "@/components/TandaBill";
 import { SettlementTimeline } from "@/components/SettlementTimeline";
+import { parseInviteParams } from "@/lib/inviteLink";
 import { Marble, TopBar } from "@worldcoin/mini-apps-ui-kit-react";
 import { isAddress, type Address } from "viem";
 
@@ -40,8 +46,12 @@ export function generateMetadata(): Metadata {
 
 export default async function BillProfile({
   params,
+  // KAIZEN-1: invite context (amount/who/redirect). OPTIONAL by contract —
+  // direct visits carry nothing and render the byte-identical ENGINE-52 page.
+  searchParams,
 }: {
   params: Promise<{ address: string }>;
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { address } = await params;
   // World App may hand the path through pre- or post-decoding; accept both.
@@ -60,6 +70,8 @@ export default async function BillProfile({
   // the identical trail + shell). auth() failing open is acceptable: the
   // chrome simply stays hidden.
   const session = await auth().catch(() => null);
+  // KAIZEN-1 (H1) read lane — untrusted until sanitized (see inviteLink).
+  const ctx = parseInviteParams(searchParams ? await searchParams : {});
 
   return (
     <Page>
@@ -98,9 +110,20 @@ export default async function BillProfile({
             </p>
           ) : (
             <>
-              <p className="font-mono text-sm tabular-nums opacity-90">
-                {raw}
-              </p>
+              <p className="font-mono text-sm tabular-nums opacity-90">{raw}</p>
+              {ctx.who !== null || ctx.amount !== null ? (
+                <p
+                  className="text-sm font-semibold rounded border border-sky-400/40 px-3 py-1.5 text-sky-300"
+                  data-testid="invite-context"
+                >
+                  {ctx.who !== null
+                    ? `@${ctx.who} invited you`
+                    : "You were invited"}
+                  {ctx.amount !== null ? ` — ${ctx.amount} USDC in escrow` : ""}{" "}
+                  (link preview before indexing — contract state is the source
+                  of truth)
+                </p>
+              ) : null}
               <div aria-live="polite" data-testid="trail-region">
                 <p className="text-sm opacity-70">
                   loading trail from the indexer…
@@ -119,13 +142,17 @@ export default async function BillProfile({
                   className="text-sm opacity-70"
                   data-testid="bill-deeplink-invalid"
                 >
-                  That invite link is malformed — ask the bill owner for a
-                  fresh one.
+                  That invite link is malformed — ask the bill owner for a fresh
+                  one.
                 </p>
               )}
             </>
           )}
-          <Link href="/" className="text-sm text-[#3ec8ff] underline">
+          <Link
+            href={ctx.redirect ?? "/"}
+            data-testid="open-tandabill"
+            className="text-sm text-[#3ec8ff] underline"
+          >
             Open TandaBill
           </Link>
         </div>
