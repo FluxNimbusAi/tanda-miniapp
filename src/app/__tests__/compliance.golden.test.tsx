@@ -5,7 +5,7 @@
 //  - /terms carries the R1 status sentence verbatim (Flux ruling 11-27)
 //  - NEITHER page may contain forbidden register: demo/beta/trial words
 //    (R1 rejection risk) or unverifiable promises ("guaranteed", "risk-free")
-import { render, screen, cleanup } from "@testing-library/react";
+import { render, cleanup } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import Privacy from "../privacy/page";
 import Terms from "../terms/page";
