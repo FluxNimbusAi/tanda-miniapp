@@ -2,6 +2,7 @@ import { auth } from '@/auth';
 import { Page } from '@/components/PageLayout';
 import { UserInfo } from '@/components/UserInfo';
 import { TandaBill } from '@/components/TandaBill';
+import { ClaimSweep } from '@/components/ClaimSweep';
 import { ViewPermissions } from '@/components/ViewPermissions';
 import { NotificationConsent } from '@/components/NotificationConsent';
 import { Marble, TopBar } from '@worldcoin/mini-apps-ui-kit-react';
@@ -38,6 +39,7 @@ export default async function Home() {
         <UserInfo />
         <NotificationConsent />
         <TandaBill />
+        <ClaimSweep />
         <ViewPermissions />
       </Page.Main>
     </>
