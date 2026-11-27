@@ -194,3 +194,20 @@ describe('dispatcher auth + config gates (engine retry semantics)', () => {
     expect(calls).toHaveLength(0);
   });
 });
+
+// ==== C3 hard-enforcement goldens (Flux scan item 3, COMMAND 57839) ====
+describe("notify idempotency law (C3)", () => {
+  it("400 when idempotency_key is absent", async () => {
+    const payload = enginePayload({});
+    delete (payload as { idempotency_key?: string }).idempotency_key;
+    const res = await POST(makeReq(payload, INTERNAL));
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toContain("idempotency_key");
+  });
+  it("400 on malformed key (too short / injection-shaped)", async () => {
+    for (const key of ["short", " spaces not allowed!!!"]) {
+      const res = await POST(makeReq(enginePayload({ idempotency_key: key }), INTERNAL));
+      expect(res.status).toBe(400);
+    }
+  });
+});

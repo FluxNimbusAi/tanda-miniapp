@@ -105,7 +105,16 @@ export async function POST(req: Request): Promise<Response> {
     return bad('localisations: [{language: en…, title ≤72, message ≤280}] required');
   }
 
-  if (body.idempotency_key && alreadySeen(body.idempotency_key)) {
+  // C3 HARD ENFORCEMENT (Flux scan 11-26: the doc claimed the key required,
+  // runtime made it optional — notifications could re-dispatch on every retry).
+  // Law: key REQUIRED and well-formed (400 otherwise); replay of a KNOWN key
+  // stays 200+deduped (idempotency semantics: the caller retries to confirm,
+  // not to be punished) — the ledger is the wall, the 400 closes the bypass.
+  const KEY_RE = /^[A-Za-z0-9:._-]{8,128}$/; // dot allowed: engine emits n2b:<addr>:<bill>:<ts>:<rand> keys
+  if (typeof body.idempotency_key !== "string" || !KEY_RE.test(body.idempotency_key)) {
+    return bad("idempotency_key required: [A-Za-z0-9:._-]{8,128}");
+  }
+  if (alreadySeen(body.idempotency_key)) {
     return Response.json({ ok: true, deduped: true });
   }
 
