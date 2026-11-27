@@ -7,6 +7,7 @@
 //             navigator.share, then clipboard, for non-World-App browsers.
 // Pure UI/read lane — no bill writes, fully reversible.
 import {
+  billInvitePath,
   buildBillInviteUrl,
   buildInviteShareText,
   INVITE_SHARE_TITLE,
@@ -27,12 +28,12 @@ const STATUS_NOTE: Record<ShareRoute, string> = {
 };
 
 /** Web-path share: native share sheet when present, else clipboard. */
-async function webShare(
-  url: string,
-  text: string,
-): Promise<ShareRoute> {
+async function webShare(url: string, text: string): Promise<ShareRoute> {
   try {
-    if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
+    if (
+      typeof navigator !== "undefined" &&
+      typeof navigator.share === "function"
+    ) {
       await navigator.share({ title: INVITE_SHARE_TITLE, text, url });
       return "web-share";
     }
@@ -60,7 +61,14 @@ export const InvitePanel = ({
   let url: string | null = null;
   let buildError: string | null = null;
   try {
-    url = buildBillInviteUrl(bill, appId);
+    // KAIZEN-1 (H1): the shared link carries the deal context - inviter
+    // handle, escrow amount, safe internal redirect - so the invitee lands
+    // already knowing who/what, before any indexer round-trip.
+    url = buildBillInviteUrl(bill, appId, {
+      who: ownerUsername,
+      amount: usdc,
+      redirect: billInvitePath(bill),
+    });
   } catch (e) {
     buildError = (e as Error).message;
   }

@@ -33,9 +33,15 @@ const VITALIK_EIP55 = "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045";
 // PORTAL-RECON (ruling 4): input := single-source portal anchor; GOLDEN_URL
 // below stays a byte-exact LITERAL so any anchor drift fails the suite.
 const APP_ID = PORTAL_APP_ID;
+// KAIZEN-1 (t_2eefc765, H1): the panel link now carries the full deal
+// context — the harness renders WITH session (ownerUsername=walters,
+// usdc=12.5), so amount+who+redirect all ride the path query in fixed
+// order. Re-pinned as a byte-exact literal; the W2.5-4 bare-path builder
+// wire stays asserted in lib/__tests__/inviteLink.test.ts and the
+// read-side fail-closed goldens in lib/__tests__/inviteParams.golden.test.ts.
 const GOLDEN_URL =
   "https://world.org/mini-app?app_id=app_d3f03e8bce15b7c4580069bf4ea882c2" +
-  `&path=%2Fbill%2F${VITALIK_EIP55}`;
+  `&path=%2Fbill%2F${VITALIK_EIP55}%3Famount%3D12.5%26who%3D%2540walters%26redirect%3D%252Fbill%252F${VITALIK_EIP55}`;
 
 const shareMock = vi.mocked(MiniKit.share) as unknown as ReturnType<
   typeof vi.fn
@@ -87,9 +93,9 @@ describe("InvitePanel", () => {
     writeText.mockRejectedValueOnce(new Error("blocked"));
     panel();
     fireEvent.click(screen.getByText("Copy link"));
-    expect(
-      await screen.findByTestId("invite-status"),
-    ).toHaveTextContent("long-press");
+    expect(await screen.findByTestId("invite-status")).toHaveTextContent(
+      "long-press",
+    );
   });
 
   it("Share via World App sheet reports the minikit route", async () => {
@@ -110,7 +116,10 @@ describe("InvitePanel", () => {
 
   it("fallback branch (executedWith fallback) reports the web route", async () => {
     const shareSpy = vi.fn().mockResolvedValue(undefined);
-    Object.defineProperty(navigator, "share", { value: shareSpy, configurable: true });
+    Object.defineProperty(navigator, "share", {
+      value: shareSpy,
+      configurable: true,
+    });
     shareMock.mockImplementation(
       async (opts: { fallback?: () => Promise<ShareRoute> }) => {
         const route = await opts.fallback!();
