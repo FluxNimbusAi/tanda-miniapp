@@ -72,7 +72,10 @@ export function isBillRpAction(action: string): action is BillRpAction {
 export type DenyReason =
   | 'offlist_action'
   | 'missing_or_nonstring_action'
-  | 'malformed_body';
+  | 'malformed_body'
+  // C1 wave (PR #54): identity + rate-limit denials recorded by the route
+  | 'unauthenticated'
+  | 'rate_limited';
 
 const LOG_MAX = 80;
 
@@ -93,7 +96,7 @@ export function sanitizeActionForLog(value: unknown): string {
 type Stats = { denied: Record<DenyReason, number>; signed: number };
 
 const stats: Stats = {
-  denied: { offlist_action: 0, missing_or_nonstring_action: 0, malformed_body: 0 },
+  denied: { offlist_action: 0, missing_or_nonstring_action: 0, malformed_body: 0, unauthenticated: 0, rate_limited: 0 },
   signed: 0,
 };
 
@@ -104,9 +107,8 @@ export function recordRpDeny(
   log: (line: string) => void = (l) => console.warn(l),
 ): void {
   stats.denied[reason] += 1;
-  const totalDenied = stats.denied.offlist_action
-    + stats.denied.missing_or_nonstring_action
-    + stats.denied.malformed_body;
+  // Key-agnostic total: adding a DenyReason member can no longer desync the counter.
+  const totalDenied = Object.values(stats.denied).reduce((a, b) => a + b, 0);
   log(
     `[rp-signature] DENY reason=${reason} action="${sanitizeActionForLog(rawAction)}" ` +
       `denied_total=${totalDenied}`,
@@ -124,8 +126,29 @@ export function getRpDenyStats(): Stats {
 }
 
 export function resetRpDenyStats(): void {
-  stats.denied.offlist_action = 0;
-  stats.denied.missing_or_nonstring_action = 0;
-  stats.denied.malformed_body = 0;
+  for (const k of Object.keys(stats.denied) as DenyReason[]) stats.denied[k] = 0;
   stats.signed = 0;
+}
+
+// C1 limiter (moved out of /api/rp-signature route module, PR #54 CI fix):
+// in-memory sliding window per IP, dev-lane parity with notify's dedupe-map
+// pattern. Edge-instance reset on cold start is acceptable while the auth
+// gate is the real wall; DB-backed counters at scale = logged backlog.
+// Lives here because Next route modules may only export handlers/config —
+// an extra export breaks `next build` type validation (Vercel fail).
+const WINDOW_MS = 60_000;
+const LIMIT = 20;
+const hits = new Map<string, number[]>();
+
+/** Test seam: clears sliding-window state between suites. Not for runtime use. */
+export function resetRpRateLimitForTesting(): void {
+  hits.clear();
+}
+
+export function isRateLimited(ip: string): boolean {
+  const now = Date.now();
+  const arr = (hits.get(ip) ?? []).filter((t) => now - t < WINDOW_MS);
+  arr.push(now);
+  hits.set(ip, arr);
+  return arr.length > LIMIT;
 }

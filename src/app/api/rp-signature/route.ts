@@ -8,6 +8,7 @@ import { PORTAL_RP_ID } from '@/lib/portalAnchors';
 import {
   BILL_RP_ACTIONS,
   isBillRpAction,
+  isRateLimited,
   recordRpDeny,
   recordRpSign,
 } from '@/lib/rpSignatureGuard';
@@ -46,24 +47,9 @@ async function authorize(req: Request): Promise<'session' | 'internal' | null> {
   return null;
 }
 
-// C1 limiter: in-memory sliding window per IP (dev-lane parity with notify's
-// dedupe-map pattern). Edge-instance reset on cold start is acceptable while
-// the auth gate is the real wall; DB-backed counters at scale = logged backlog.
-const WINDOW_MS = 60_000;
-const LIMIT = 20;
-const hits = new Map<string, number[]>();
-/** Test seam: clears sliding-window state between suites. Not for runtime use. */
-export function __resetRpRateLimitForTesting(): void {
-  hits.clear();
-}
-
-function rateLimited(ip: string): boolean {
-  const now = Date.now();
-  const arr = (hits.get(ip) ?? []).filter((t) => now - t < WINDOW_MS);
-  arr.push(now);
-  hits.set(ip, arr);
-  return arr.length > LIMIT;
-}
+// C1 limiter: see isRateLimited in @/lib/rpSignatureGuard (moved out of this
+// route module: Next route files may only export handlers/config, an extra
+// export broke `next build` type validation — PR #54 CI fix).
 
 // C2 (voided-anchor coercion): production env carries rp_a779c304e4f624ce,
 // an id VOIDED by ADR-0011/0012 — the env layer overrode a correct code
@@ -104,7 +90,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
   const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'local';
-  if (rateLimited(ip)) {
+  if (isRateLimited(ip)) {
     recordRpDeny('rate_limited', undefined);
     return NextResponse.json(
       { error: 'rate limit exceeded' },

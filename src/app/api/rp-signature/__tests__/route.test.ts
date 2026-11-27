@@ -9,12 +9,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 // exercise the gate for real.
 vi.mock('@/auth', () => ({ auth: async () => null }));
 
-import { POST, __resetRpRateLimitForTesting } from '../route';
+import { POST } from '../route';
 import {
   BILL_RP_ACTIONS,
   getRpDenyStats,
   isBillRpAction,
   resetRpDenyStats,
+  resetRpRateLimitForTesting,
   sanitizeActionForLog,
 } from '@/lib/rpSignatureGuard';
 
@@ -43,7 +44,7 @@ beforeEach(() => {
   process.env.RP_SIGNING_KEY = TEST_SIGNING_KEY;
   process.env.RP_ID = TEST_RP_ID;
   process.env.RP_INTERNAL_KEY = 'test-internal-key';
-  __resetRpRateLimitForTesting();
+  resetRpRateLimitForTesting();
   resetRpDenyStats();
   warnLines = [];
   vi.spyOn(console, 'warn').mockImplementation((...args: unknown[]) => {
