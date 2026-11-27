@@ -6,10 +6,16 @@
 // the BillSnapshot the probe already fetches — zero new data sources, zero
 // contract/RPC reads, pure arithmetic on (snap, nowSec).
 //
-// Wiring only: the engine decides WHO/WHAT/WHEN and the push lands here;
-// this file only RENDERS what the push claimed. Copy mirrors the ratified
-// engine strings so the landing matches the notification verbatim where the
-// client knows the same facts.
+// KAIZEN-2 (H2/H3): phase honesty correction. The engine copy promised an
+// automatic outcome ("escrow auto-refunds", "settlement executes in ~45m"),
+// but the services lane has ZERO auto-callers — refund/execute are
+// permissionless doors that OPEN at initiatedAt+MAX_HOLD /
+// fullyConfirmedAt+WINDOW. Copy now says door-language and states the money
+// rule before the action (refund-in-full / split-per-terms), derived from the
+// canonical billPhase machine so the chip and the lifecycle share one
+// vocabulary. The engine-side mirror (nudge_engine.py push strings) rides a
+// SEPARATE tanda branch after KAIZEN-3 merges — this repo no longer mirrors
+// the old strings verbatim on purpose.
 //
 // Era scope: factory lineage only (factory-w10 + factory-v2) — those answer
 // the V2 settlement 7-tuple with fullyConfirmedAt/MAX_HOLD. Legacy W5 has no
@@ -18,11 +24,16 @@
 // null: the existing "Settled on-chain" line owns those moments, and the
 // engine goes silent there too (spec §6 cases 1–2).
 
+import { billPhase, formatNudgeDuration, type PhaseSnap } from './billPhase';
+
+export { formatNudgeDuration } from './billPhase';
+export type { PhaseSnap } from './billPhase';
+
 export type NudgeStatusKind =
-  | 'refund-countdown' // initiated, confirmations outstanding, inside MAX_HOLD
+  | 'refund-countdown' // initiated, signatures outstanding, inside MAX_HOLD
   | 'refund-horizon' // past initiatedAt+MAX_HOLD, nobody refunded yet — last call
-  | 'execute-countdown' // fully confirmed, settlement window still pending
-  | 'executable'; // fully confirmed + window elapsed — settle now
+  | 'execute-countdown' // all seats signed, settlement window still pending
+  | 'executable'; // all seats signed + window elapsed — settle now
 
 export type NudgeStatus = {
   kind: NudgeStatusKind;
@@ -31,64 +42,49 @@ export type NudgeStatus = {
 };
 
 /** The fields nudgeStatus reads off BillSnapshot — structural subset so tests
- *  (and other hosts) can pass minimal literals without viem bigint noise. */
-export type NudgeSnap = {
-  era: string;
-  initiatedAt: bigint;
-  settledAt: bigint;
-  fullyConfirmedAt: bigint;
-  refunded: boolean;
-  /** SETTLEMENT_WINDOW seconds (1h on factory lineage). */
-  window: bigint;
-  /** MAX_HOLD seconds (72h on factory lineage). */
-  maxHold: bigint;
-};
+ *  (and other hosts) can pass minimal literals without viem bigint noise.
+ *  Alias of billPhase's PhaseSnap: one machine, one input shape. */
+export type NudgeSnap = PhaseSnap;
 
 const FACTORY_ERAS: ReadonlySet<string> = new Set(['factory-w10', 'factory-v2']);
 
 export function nudgeStatus(snap: NudgeSnap, nowSec: number): NudgeStatus | null {
   if (!FACTORY_ERAS.has(snap.era)) return null;
-  // Terminal first — mirrors engine §6 cases 1–2 (and the app's settled line).
-  if (snap.refunded || snap.settledAt > BigInt(0)) return null;
-  if (snap.initiatedAt === BigInt(0)) return null; // nothing pending, nothing due
-
-  if (snap.fullyConfirmedAt > BigInt(0)) {
-    const execAt = Number(snap.fullyConfirmedAt) + Number(snap.window);
-    const remaining = execAt - nowSec;
-    return remaining > 0
-      ? { kind: 'execute-countdown', remainingSec: remaining }
-      : { kind: 'executable', remainingSec: null };
+  // Single source of truth for the arithmetic + honesty (billPhase).
+  const info = billPhase(snap, nowSec);
+  switch (info.phase) {
+    case 'initiated':
+      return info.refundDoorOpen
+        ? { kind: 'refund-horizon', remainingSec: 0 }
+        : { kind: 'refund-countdown', remainingSec: info.remainingSec ?? 0 };
+    case 'window':
+      return { kind: 'execute-countdown', remainingSec: info.remainingSec ?? 0 };
+    case 'executable':
+      return { kind: 'executable', remainingSec: null };
+    default:
+      // draft/funded (nothing pending), settled/refunded (terminal silence,
+      // engine §6 cases 1–2 — the on-chain status line owns those moments).
+      return null;
   }
-
-  const deadline = Number(snap.initiatedAt) + Number(snap.maxHold);
-  const remaining = deadline - nowSec;
-  return remaining > 0
-    ? { kind: 'refund-countdown', remainingSec: remaining }
-    : { kind: 'refund-horizon', remainingSec: 0 };
-}
-
-/** "52h" / "47m" granularity — the same coarse clock the push copy uses. */
-export function formatNudgeDuration(totalSec: number): string {
-  const sec = Math.max(0, Math.floor(totalSec));
-  if (sec >= 3600) return `${Math.floor(sec / 3600)}h`;
-  return `${Math.max(1, Math.floor(sec / 60))}m`;
 }
 
 /** Human label for the chip. `usdc` (already trimmed, e.g. "3.75") is shown
- *  on the last-call states, mirroring the engine's `${usdc}` substitution. */
+ *  on the refund-door states, mirroring the engine's `${usdc}` substitution.
+ *  KAIZEN-2 law: door language, never "auto"; money rule before the prompt;
+ *  seats SIGN (the word "confirmed" left chip copy with the vocab collision). */
 export function nudgeLabel(st: NudgeStatus, usdc?: string): string {
-  const escrow = usdc ? ` ${usdc} USDC` : ' the';
+  const escrow = usdc ? ` ${usdc} USDC` : ' the escrow';
   switch (st.kind) {
     case 'refund-countdown':
-      // §3 N2b copy, same sentence the push carried.
-      return `Settlement expires in ${formatNudgeDuration(st.remainingSec ?? 0)} — confirm now or escrow auto-refunds`;
+      // Door not open yet: cancel-early is a full return; nothing moves by itself.
+      return `Confirm now — cancel-early returns${escrow} in full until the refund door opens in ${formatNudgeDuration(st.remainingSec ?? 0)}`;
     case 'refund-horizon':
-      // §3 N2c "last call" moment, still unsurfaced on landing.
-      return `Last call: escrow${escrow} returns to the funder on refund — confirm now`;
+      // Door is OPEN: permissive, not automatic. Anyone may call the refund.
+      return `Last call: the refund door is open —${escrow} returns to the funder in full and anyone can call it. Seats can still settle.`;
     case 'execute-countdown':
-      return `All seats confirmed — settlement executes in ~${formatNudgeDuration(st.remainingSec ?? 0)}`;
+      // Seats SIGN (H3 vocab); execution unlocks, never "executes by itself".
+      return `All seats signed — settlement unlocks in ~${formatNudgeDuration(st.remainingSec ?? 0)}, then anyone can execute`;
     case 'executable':
-      // §3 N3a copy verbatim.
-      return 'All seats confirmed — settlement is ready. One tap to open payouts.';
+      return 'Settlement is unlocked — one tap executes. Payouts split per the signed vector.';
   }
 }
