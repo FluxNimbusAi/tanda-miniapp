@@ -35,6 +35,11 @@ export const ModeGate = () => {
             </p>
           </div>
           <AuthButton />
+          <footer className="mt-10 flex items-center justify-center gap-4 text-xs opacity-70" data-testid="compliance-links">
+            <a href="/privacy" className="underline">Privacy</a>
+            <a href="/terms" className="underline">Terms</a>
+            <a href="mailto:tandabill-support@agentmail.to" className="underline">Support</a>
+          </footer>
         </Page.Main>
       </Page>
     );
