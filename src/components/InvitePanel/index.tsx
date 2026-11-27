@@ -60,7 +60,7 @@ export const InvitePanel = ({
   let url: string | null = null;
   let buildError: string | null = null;
   try {
-    url = buildBillInviteUrl(bill, appId);
+    url = buildBillInviteUrl(bill, appId, { amt: usdc, who: ownerUsername });
   } catch (e) {
     buildError = (e as Error).message;
   }

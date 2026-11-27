@@ -47,14 +47,14 @@ const BAD_CHECKSUM = "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96046";
 
 describe("/bill/[address] shell (C4)", () => {
   it("valid address: chip + address + trail region", async () => {
-    const ui = await BillProfile({ params: Promise.resolve({ address: A }) });
+    const ui = await BillProfile({ params: Promise.resolve({ address: A }), searchParams: Promise.resolve({}) });
     render(ui as never);
     expect(screen.getByTestId("testnet-chip").textContent).toContain("not real funds");
     expect(screen.getByTestId("bill-profile").textContent).toContain(A);
     expect(screen.getByTestId("trail-region")).toBeTruthy();
   });
   it("invalid address: honest error copy, no fabricated trail", async () => {
-    const ui = await BillProfile({ params: Promise.resolve({ address: "0xnope" }) });
+    const ui = await BillProfile({ params: Promise.resolve({ address: "0xnope" }), searchParams: Promise.resolve({}) });
     render(ui as never);
     expect(screen.getByTestId("invalid-address").textContent).toContain("not a valid wallet");
     expect(screen.queryByTestId("trail-region")).toBeNull();
@@ -64,7 +64,7 @@ describe("/bill/[address] shell (C4)", () => {
 describe("/bill/[address] invite shell (ENGINE-52 fold of W2.5-4)", () => {
   it("valid address: full shell + timeline pre-probed; signed-out never walled", async () => {
     // auth mock returns null (signed-out) — page must render trail AND shell.
-    const ui = await BillProfile({ params: Promise.resolve({ address: A }) });
+    const ui = await BillProfile({ params: Promise.resolve({ address: A }), searchParams: Promise.resolve({}) });
     render(ui as never);
     expect(screen.getByTestId("tandabill-shell").getAttribute("data-bill")).toBe(A);
     expect(screen.getByTestId("settlement-timeline").getAttribute("data-bill")).toBe(A);
@@ -73,6 +73,7 @@ describe("/bill/[address] invite shell (ENGINE-52 fold of W2.5-4)", () => {
   it("broken checksum: honest trail, malformed-invite copy, NO shell probe", async () => {
     const ui = await BillProfile({
       params: Promise.resolve({ address: BAD_CHECKSUM }),
+      searchParams: Promise.resolve({}),
     });
     render(ui as never);
     expect(screen.getByTestId("bill-deeplink-invalid").textContent).toContain("malformed");
@@ -82,6 +83,7 @@ describe("/bill/[address] invite shell (ENGINE-52 fold of W2.5-4)", () => {
   it("percent-encoded path parses to the shell (decode-tolerant lane)", async () => {
     const ui = await BillProfile({
       params: Promise.resolve({ address: "%30x" + A.slice(2) }),
+      searchParams: Promise.resolve({}),
     });
     render(ui as never);
     expect(screen.getByTestId("tandabill-shell").getAttribute("data-bill")).toBe(A);
@@ -89,9 +91,34 @@ describe("/bill/[address] invite shell (ENGINE-52 fold of W2.5-4)", () => {
   });
   it("auth() rejection fails open — chrome hidden, public page intact", async () => {
     vi.mocked(auth).mockRejectedValueOnce(new Error("Missing Secrets"));
-    const ui = await BillProfile({ params: Promise.resolve({ address: A }) });
+    const ui = await BillProfile({ params: Promise.resolve({ address: A }), searchParams: Promise.resolve({}) });
     render(ui as never);
     expect(screen.getByTestId("tandabill-shell")).toBeTruthy();
     expect(screen.getByTestId("trail-region")).toBeTruthy();
+  });
+});
+
+// KAIZEN-1 landing goldens: hints render ONLY when valid; authority sentence
+// always accompanies them; hand-typed garbage never appears.
+describe("/bill/[address] request-link hints (KAIZEN-1)", () => {
+  const A = "0x1111111111111111111111111111111111111111";
+  it("valid amt+who -> hint with contract-authority sentence", async () => {
+    const ui = await BillProfile({
+      params: Promise.resolve({ address: A }),
+      searchParams: Promise.resolve({ amt: "12.5", who: "daniel_b" }),
+    });
+    render(ui as never);
+    const el = screen.getByTestId("req-link-hint");
+    expect(el.textContent).toContain("12.5 USDC");
+    expect(el.textContent).toContain("daniel_b");
+    expect(el.textContent).toContain("only authority");
+  });
+  it("injection-shaped params dropped entirely (no banner)", async () => {
+    const ui = await BillProfile({
+      params: Promise.resolve({ address: A }),
+      searchParams: Promise.resolve({ amt: "12; rm -rf /", who: "<script>x</script>" }),
+    });
+    render(ui as never);
+    expect(screen.queryByTestId("req-link-hint")).toBeNull();
   });
 });

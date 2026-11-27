@@ -25,6 +25,7 @@ import { TandaBill } from "@/components/TandaBill";
 import { SettlementTimeline } from "@/components/SettlementTimeline";
 import { Marble, TopBar } from "@worldcoin/mini-apps-ui-kit-react";
 import { isAddress, type Address } from "viem";
+import { REQ_AMT_RE, REQ_WHO_RE } from "@/lib/inviteLink";
 
 export const dynamic = "force-dynamic";
 
@@ -40,10 +41,17 @@ export function generateMetadata(): Metadata {
 
 export default async function BillProfile({
   params,
+  searchParams,
 }: {
   params: Promise<{ address: string }>;
+  searchParams: Promise<{ amt?: string; who?: string }>;
 }) {
   const { address } = await params;
+  // KAIZEN-1 landing half: read + re-validate the display-only hints (the
+  // builder validated them once; the page NEVER trusts a hand-typed URL).
+  const sp = await searchParams;
+  const amtHint = sp.amt && REQ_AMT_RE.test(sp.amt) ? sp.amt : null;
+  const whoHint = sp.who && REQ_WHO_RE.test(sp.who) ? sp.who : null;
   // World App may hand the path through pre- or post-decoding; accept both.
   let raw = address;
   try {
@@ -92,6 +100,13 @@ export default async function BillProfile({
               World Chain Sepolia (4801) — testnet, not real funds
             </span>
           </header>
+      {(amtHint || whoHint) && (
+        <p className="text-sm opacity-90" data-testid="req-link-hint">
+          {whoHint ? <>invited by <span className="font-semibold">{whoHint}</span>{amtHint ? " · " : ""}</> : null}
+          {amtHint ? <>your seat is roughly <span className="font-mono tabular-nums">{amtHint} USDC</span> — </> : null}
+          the contract&apos;s own figures at join time are the only authority.
+        </p>
+      )}
           {!valid ? (
             <p className="text-sm opacity-80" data-testid="invalid-address">
               That address is not a valid wallet. Check the link.

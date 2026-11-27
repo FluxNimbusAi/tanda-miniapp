@@ -71,3 +71,26 @@ describe("inviteLink golden wire", () => {
     );
   });
 });
+
+// KAIZEN-1 builder goldens: request-link params — validated in, encoded out;
+// invalid values dropped, never smuggled through encoding.
+describe("request-link params (KAIZEN-1)", () => {
+  const B = "0x2032cc313c5b115e8aaa1ae7615d60aa3a199810" as `0x${string}`;
+  const APP = "app_d3f03e8bce15b7c4580069bf4ea882c2";
+  it("amt+who ride the encoded path", () => {
+    const u = buildBillInviteUrl(B, APP, { amt: "12.50", who: "daniel_b" });
+    const path = decodeURIComponent(new URL(u).searchParams.get("path")!);
+    expect(path.toLowerCase().startsWith(`/bill/${B.toLowerCase()}?`)).toBe(true);
+    expect(path).toMatch(/amt=12\.50/);
+    expect(path).toMatch(/who=daniel_b/);
+  });
+  it("invalid values dropped, link stays canonical", () => {
+    const u = buildBillInviteUrl(B, APP, { amt: "1;rm", who: "a b<script>" });
+    const path = decodeURIComponent(new URL(u).searchParams.get("path")!);
+    expect(path).not.toContain("amt");
+    expect(path).not.toContain("who");
+  });
+  it("no opts = byte-identical to legacy output (determinism)", () => {
+    expect(buildBillInviteUrl(B, APP)).toBe(buildBillInviteUrl(B, APP, {}));
+  });
+});

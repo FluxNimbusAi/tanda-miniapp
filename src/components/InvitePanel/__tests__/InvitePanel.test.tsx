@@ -33,9 +33,12 @@ const VITALIK_EIP55 = "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045";
 // PORTAL-RECON (ruling 4): input := single-source portal anchor; GOLDEN_URL
 // below stays a byte-exact LITERAL so any anchor drift fails the suite.
 const APP_ID = PORTAL_APP_ID;
+// KAIZEN-1 law change: panel links now carry validated display hints
+// (amt/who; landing pairs them with the contract-authority sentence).
+// Hand-encoding kept: %3F='?' %3D='=' %26='&' — same discipline as before.
 const GOLDEN_URL =
   "https://world.org/mini-app?app_id=app_d3f03e8bce15b7c4580069bf4ea882c2" +
-  `&path=%2Fbill%2F${VITALIK_EIP55}`;
+  `&path=%2Fbill%2F${VITALIK_EIP55}%3Famt%3D12.5%26who%3Dwalters`;
 
 const shareMock = vi.mocked(MiniKit.share) as unknown as ReturnType<
   typeof vi.fn

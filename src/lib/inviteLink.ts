@@ -17,20 +17,41 @@ import { getAddress, isAddress, type Address } from 'viem';
  *  Bounded regex guards a malformed env from ever reaching a share sheet. */
 export const WORLD_APP_ID_RE = /^app_[A-Za-z0-9]{8,64}$/;
 
+/** KAIZEN-1 (recon H1, request-link lineage — original implementation):
+ *  optional DISPLAY-ONLY hints ride the invite path: amt (human USDC units
+ *  the joiner likely owes) + who (creator label). Strict validators on BOTH
+ *  the builder and the landing page; invalid values are DROPPED, never
+ *  escaped-and-shown. These params are advisory chrome: the contract's own
+ *  figures are the only authority the join flow trusts (asserted by golden). */
+export const REQ_AMT_RE = /^\d{1,9}(\.\d{1,2})?$/;
+export const REQ_WHO_RE = /^[A-Za-z0-9_]{1,24}$/;
+
 /** Canonical in-mini-app path for a bill. EIP-55 checksum form -> the SAME
  *  url from any pasted casing (deterministic, golden-testable). */
-export function billInvitePath(bill: Address): string {
+export function billInvitePath(
+  bill: Address,
+  opts?: { amt?: string; who?: string },
+): string {
   if (!isAddress(bill))
     throw new RangeError(`invite: not a valid bill address: ${bill}`);
-  return `/bill/${getAddress(bill)}`;
+  const path = `/bill/${getAddress(bill)}`;
+  const qs = new URLSearchParams();
+  if (opts?.amt && REQ_AMT_RE.test(opts.amt)) qs.set('amt', opts.amt);
+  if (opts?.who && REQ_WHO_RE.test(opts.who)) qs.set('who', opts.who);
+  const q = qs.toString();
+  return q ? `${path}?${q}` : path;
 }
 
 /** Shareable universal invite link for one bill. */
-export function buildBillInviteUrl(bill: Address, appId: string): string {
+export function buildBillInviteUrl(
+  bill: Address,
+  appId: string,
+  opts?: { amt?: string; who?: string },
+): string {
   if (!WORLD_APP_ID_RE.test(appId))
     throw new RangeError(`invite: invalid World app_id: ${appId}`);
   return `https://world.org/mini-app?app_id=${appId}&path=${encodeURIComponent(
-    billInvitePath(bill),
+    billInvitePath(bill, opts),
   )}`;
 }
 
