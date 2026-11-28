@@ -8,13 +8,17 @@ import {
   renderSettlementVectorText,
   type SettlementVector,
 } from "@/lib/settlementVector";
-
-const short = (w: string): string => `${w.slice(0, 6)}…${w.slice(-4)}`;
+import { labelFor, type NamesByWallet } from "@/lib/identityDisplay";
 
 export const SettlementVectorTable = ({
   vector,
+  names,
 }: {
   vector: SettlementVector;
+  // KAIZEN-9 display law: wallet -> username map for the identity cells.
+  // Absent (undefined) keeps every byte of the legacy short-address render —
+  // the committed golden is the fail-soft regression pin.
+  names?: NamesByWallet;
 }) => {
   const n = vector.components.length;
   return (
@@ -70,7 +74,7 @@ export const SettlementVectorTable = ({
                 className="break-all"
                 aria-describedby={`sv-explain-${c.seatId}`}
               >
-                {short(c.wallet)}
+                {labelFor(names, c.wallet)}
               </td>
               <td
                 aria-describedby={`sv-explain-${c.seatId}`}
@@ -96,12 +100,12 @@ export const SettlementVectorTable = ({
           {vector.expenseTrace.map((e) => (
             <li key={e.id} className="tabular-nums">
               expense #{e.id}: {formatUnits6(e.amount)} USDC paid by{" "}
-              {short(e.paidBy)}
+              {labelFor(names, e.paidBy)}
             </li>
           ))}
         </ul>
       )}
-      <p className="sr-only">{renderSettlementVectorText(vector)}</p>
+      <p className="sr-only">{renderSettlementVectorText(vector, names)}</p>
     </section>
   );
 };

@@ -24,6 +24,12 @@ import {
   pendingOnChainGrants,
   type GrantFeed,
 } from "@/lib/seatJoin";
+import {
+  identityLabel,
+  labelFor,
+  namesFromSeats,
+  type NamesByWallet,
+} from "@/lib/identityDisplay";
 import { InvitePanel } from "@/components/InvitePanel";
 import {
   lookupUsernamesForWallets,
@@ -355,8 +361,7 @@ async function fetchSeatRows(
 const Badge = ({ seat, mine }: { seat: SeatRow; mine: boolean }) => (
   <span className="flex items-center justify-between gap-2 rounded border px-2 py-1 text-xs">
     <span className="break-all">
-      #{seat.seatId} {seat.username ? `@${seat.username} · ` : ""}
-      {`${seat.wallet.slice(0, 6)}…${seat.wallet.slice(-4)}`}
+      #{seat.seatId} {identityLabel(seat.wallet, seat.username)}
       {mine && <b className="ml-1">(me)</b>}
     </span>
     <span className="flex shrink-0 gap-1">
@@ -400,6 +405,45 @@ export const TandaBill = ({
   const [seats, setSeats] = useState<SeatRow[]>([]);
   // BRIDGE-2 (t_a9f67ed4): portal-verified grants awaiting the on-chain burn.
   const [grantFeed, setGrantFeed] = useState<GrantFeed | null>(null);
+  // KAIZEN-9 (t_5dbc6910) display law: pending-burn rows are authenticated
+  // humans (seat_grants feed). Resolve their @handles fail-soft: undefined
+  // until the first lookup lands, service-down keeps short addresses — the
+  // burn list NEVER blanks and NEVER gates on the username service.
+  const [burnNames, setBurnNames] = useState<NamesByWallet | undefined>(
+    undefined,
+  );
+  useEffect(() => {
+    if (!billAddr || !grantFeed) {
+      setBurnNames(undefined);
+      return;
+    }
+    const wallets = pendingOnChainGrants(grantFeed, seats, billAddr).map(
+      (pb) => pb.wallet,
+    );
+    if (wallets.length === 0) {
+      setBurnNames(new Map());
+      return;
+    }
+    let live = true;
+    void lookupUsernamesForWallets(wallets)
+      .then((byWallet) => {
+        if (!live) return;
+        setBurnNames(
+          namesFromSeats(
+            [...byWallet.entries()].map(([wallet, rec]) => ({
+              wallet,
+              username: rec.username,
+            })),
+          ),
+        );
+      })
+      .catch(() => {
+        /* username service down: short addresses, burn lane stays live */
+      });
+    return () => {
+      live = false;
+    };
+  }, [billAddr, grantFeed, seats]);
   const [nowSec, setNowSec] = useState(0);
   const [expenseAmt, setExpenseAmt] = useState("");
   const [fundAmt, setFundAmt] = useState("");
@@ -461,11 +505,11 @@ export const TandaBill = ({
 
   const session = useSession();
 
-// BRIDGE-2 entrance gate (Flux COMMAND 2026-11-24): the panel stays dark
-// until the static factory address lands in the portal's Contract
-// Entrypoints ([HUMAN_GATE] @d3b0m3n) - MiniKit would otherwise reject
-// registerSeat userops with invalid_contract in a real World App session.
-const SEAT_BURN_ENABLED = process.env.NEXT_PUBLIC_SEAT_BURN === "1";
+  // BRIDGE-2 entrance gate (Flux COMMAND 2026-11-24): the panel stays dark
+  // until the static factory address lands in the portal's Contract
+  // Entrypoints ([HUMAN_GATE] @d3b0m3n) - MiniKit would otherwise reject
+  // registerSeat userops with invalid_contract in a real World App session.
+  const SEAT_BURN_ENABLED = process.env.NEXT_PUBLIC_SEAT_BURN === "1";
 
   const myWallet = (
     session.data?.user as { walletAddress?: string } | undefined
@@ -987,7 +1031,7 @@ const SEAT_BURN_ENABLED = process.env.NEXT_PUBLIC_SEAT_BURN === "1";
                   className="flex items-center justify-between gap-2"
                 >
                   <span className="font-mono text-xs opacity-70">
-                    {pb.wallet.slice(0, 6)}...{pb.wallet.slice(-4)}
+                    {labelFor(burnNames, pb.wallet)}
                   </span>
                   <button
                     type="button"
@@ -1026,7 +1070,10 @@ const SEAT_BURN_ENABLED = process.env.NEXT_PUBLIC_SEAT_BURN === "1";
             <NudgeCountdown status={nudge} usdc={escrowUSDC} />
           )}
           {settlementVector && (
-            <SettlementVectorTable vector={settlementVector} />
+            <SettlementVectorTable
+              vector={settlementVector}
+              names={namesFromSeats(seats)}
+            />
           )}
 
           {forwarderEra && initiated && mySeat && !mineConfirmed && (

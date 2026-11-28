@@ -472,7 +472,11 @@ const fixtures: SettlementVector[] = [
 ];
 
 test("golden: text renderer matches the committed snapshot", () => {
-  const rendered = fixtures.map(renderSettlementVectorText).join("=====\n");
+  // KAIZEN-9: explicit no-names call — the renderer's default MUST stay
+  // byte-identical to the frozen golden (fail-soft regression pin).
+  const rendered = fixtures
+    .map((v) => renderSettlementVectorText(v))
+    .join("=====\n");
   if (process.env.UPDATE_GOLDEN === "1" || !existsSync(GOLDEN)) {
     mkdirSync(dirname(GOLDEN), { recursive: true });
     writeFileSync(GOLDEN, rendered);
