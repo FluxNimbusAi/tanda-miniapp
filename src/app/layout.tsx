@@ -53,6 +53,14 @@ export const metadata: Metadata = {
   manifest: MANIFEST_URL,
 };
 
+// PERF-PASS 2026-11-28 (brief dayshift_PERF-PASS_20261128_1115): the PWA manifest
+// was the top finding — a cold-discovery hop on the network dependency tree
+// (audit scored 0). Preload must target exactly the metadata URL; wrong `as`
+// double-fetches, so URL and attributes are pinned in perfPassManifest.golden.test.ts.
+const MANIFEST_URL = '/manifest.webmanifest';
+
+
+
 // SSR-SHELL (V5 audit card 1, white-screen kill): an unbounded `await auth()`
 // in the root layout blocks time-to-first-byte for EVERY lane — inside World
 // App on a mid-range phone the served body was title-only until the IdP
