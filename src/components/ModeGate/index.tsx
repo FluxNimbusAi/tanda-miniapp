@@ -12,6 +12,27 @@ import { useMiniKit } from "@worldcoin/minikit-js/minikit-provider";
 export const ModeGate = () => {
   const { isInstalled } = useMiniKit();
 
+  // APP-1 (t_f16cf60b): null = MiniKit still resolving. Falling through to
+  // LiveExplorer here FLASHED the browser mode at World App users for a
+  // beat — a splash-first entry is the native-app cue and kills the flash.
+  if (isInstalled !== true && isInstalled !== false) {
+    return (
+      <Page>
+        <Page.Main className="flex flex-col items-center justify-center gap-3 px-6 text-center">
+          <p
+            className="text-xs font-bold uppercase tracking-[0.2em] text-[#3ec8ff]"
+            data-testid="app-splash-kicker"
+          >
+            TandaBill
+          </p>
+          <p className="font-semibold" style={{ fontSize: "clamp(1.2rem, 5vw, 1.6rem)" }}>
+            Funded means funded.
+          </p>
+        </Page.Main>
+      </Page>
+    );
+  }
+
   if (isInstalled === true) {
     return (
       <Page>

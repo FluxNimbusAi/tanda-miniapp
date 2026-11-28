@@ -20,7 +20,7 @@ export default async function TabsLayout({
       {children}
       {/* DEF-4 [t_1d9b5038]: tab bar is <nav>, not a footer element —
           World mini-app rule bans <footer> on shipped surfaces. */}
-      <nav className="fixed bottom-0 w-full bg-background">
+      <nav className="fixed bottom-0 w-full bg-background pb-[env(safe-area-inset-bottom)]">
         <Navigation />
       </nav>
     </Page>

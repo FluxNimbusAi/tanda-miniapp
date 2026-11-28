@@ -2,9 +2,13 @@
 // W2.5-3 (t_14b21fee) MODE-SWITCH GOLDEN. The contract:
 //   isInstalled === true  -> full app hero ONLY (AuthButton wall allowed here,
 //                            Explorer must not render).
-//   isInstalled false/undefined (browser, SSR, pre-init) -> Read-Only Live
-//                            Explorer ONLY, with ZERO wallet affordances and
-//                            a GET-only network surface.
+//   isInstalled false (definite browser)      -> Read-Only Live Explorer
+//                            ONLY, ZERO wallet affordances, GET-only surface.
+//   APP-1 LAW CHANGE (t_f16cf60b): isInstalled null/undefined (pre-init on
+//                            client) -> SPLASH, not explorer: World App users
+//                            were FLASHED the browser explorer for a beat on
+//                            every cold open. Splash is the native entry cue;
+//                            definite-false still routes straight to Explorer.
 //   flip true->false       -> Explorer renders (route-level reactive gate).
 //   KAIZEN-8 ladder        -> degraded reads surface LAST-KNOWN-GOOD (server
 //                            cache replay or browser snapshot) as
@@ -155,11 +159,16 @@ describe('W2.5-3 dual-mode gate', () => {
     expect(chip(/bills indexed: 18/)).toBeInTheDocument();
   });
 
-  it('SSR/pre-init default (isInstalled undefined) is the browser lane, not the wall', async () => {
+  // APP-1 LAW CHANGE (t_f16cf60b): pre-init now shows the branded SPLASH —
+  // the old contract (undefined -> Explorer) is what flashed browser chrome at
+  // World App users on cold open. Definite-browser (false) keeps the Explorer
+  // lane unchanged; splash shows NEITHER explorer nor wallet affordances.
+  it('pre-init (isInstalled undefined) shows the splash, not an explorer flash', async () => {
     H.isInstalled = undefined;
     const ModeGate = await gate();
     render(<ModeGate />);
-    expect(await screen.findByText(/Watch it happen/)).toBeInTheDocument();
+    expect(await screen.findByTestId('app-splash-kicker')).toBeInTheDocument();
+    expect(screen.queryByText(/Watch it happen/)).toBeNull();
     expect(screen.queryByText('Login with Wallet')).toBeNull();
   });
 
