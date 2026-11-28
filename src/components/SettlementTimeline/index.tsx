@@ -8,11 +8,18 @@ import {
 } from "@/lib/billLifecycle";
 
 /**
- * ui-t1 P2+P1 (t_2a5cc6a7 tier "now"): vertical settlement timeline +
- * one-action CTA, both a PURE function of /api/settlements?bill= indexer
- * reads (W8: no client address guessing, no direct chain). Night Ledger
- * tokens; money/blocks use tabular-nums (P9 typography law); done steps
- * carry the blue signal, pending steps stay dim - accent discipline holds.
+ * DAY-SHIFT DESIGN-PASS (dp1, brief dayshift_DESIGN-PASS_20261128_0915):
+ * the weakest screen in the product surface was this timeline — a bare <ol>
+ * of dots on an ad-hoc grid, no card rhythm. Redesign to ui-kit cadence of
+ * the listed apps (AgentBank / WLD Pay bar): one card shell (rounded-2xl,
+ * border, px-4 py-3), header row + progress meter built from the SAME pure
+ * function as the steps (zero new state), step rows at 44px touch rhythm with
+ * chevron affordance, and the next-action CTA promoted from prose to a real
+ * bar. Night Ledger law tokens only — no raw hex, no new palette.
+ * Behavior contract unchanged: pure function of /api/settlements?bill= reads
+ * (W8), honest loading state, role="status", data-testids preserved
+ * (settlement-timeline, timeline-cta-note) + one additive golden anchor
+ * (timeline-progress). Goldens before/after in the PR body.
  */
 export const SettlementTimeline = ({ bill }: { bill: string }) => {
   const [events, setEvents] = useState<FeedEvent[] | null>(null);
@@ -48,16 +55,29 @@ export const SettlementTimeline = ({ bill }: { bill: string }) => {
 
   const steps = lifecycleSteps(events, seatTotal);
   const act = nextAction(events, seatTotal);
+  const doneCount = steps.filter((s) => s.done).length;
+
   return (
     <section
       aria-label="Settlement lifecycle"
       data-testid="settlement-timeline"
-      className="grid gap-1"
+      className="rounded-2xl border border-[#232834] bg-[#161a22] px-4 py-3 shadow-[0_1px_0_rgba(255,255,255,0.04)]"
     >
-      <p className="text-xs font-semibold opacity-80">Lifecycle</p>
-      <ol className="grid">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-sm font-semibold">Lifecycle</p>
+        <p
+          data-testid="timeline-progress"
+          className="text-xs font-mono tabular-nums opacity-70"
+        >
+          {doneCount}/{steps.length}
+        </p>
+      </div>
+      <ol className="mt-2 grid">
         {steps.map((s) => (
-          <li key={s.key} className="flex items-baseline gap-2 py-1.5">
+          <li
+            key={s.key}
+            className="flex min-h-[44px] items-center gap-3 border-b border-[#232834] py-2 last:border-b-0"
+          >
             <span
               aria-hidden
               className={`inline-block h-2.5 w-2.5 shrink-0 rounded-full ${
@@ -65,7 +85,7 @@ export const SettlementTimeline = ({ bill }: { bill: string }) => {
               }`}
             />
             <span
-              className={`text-sm ${s.done ? "font-semibold" : "opacity-60"}`}
+              className={`text-sm flex-1 ${s.done ? "font-semibold" : "opacity-60"}`}
             >
               {s.label}
             </span>
@@ -77,16 +97,29 @@ export const SettlementTimeline = ({ bill }: { bill: string }) => {
           </li>
         ))}
       </ol>
-      {act.cta !== "" && (
-        <p className="text-xs opacity-85" data-testid="timeline-cta-note">
-          <span className="font-semibold">{act.cta}</span> — {act.note}
+      <div
+        data-testid="timeline-cta-note"
+        className="mt-3 flex items-center justify-between gap-3 rounded-xl bg-[#232834] px-3 py-2.5"
+      >
+        <p className="text-xs opacity-85">
+          {act.cta !== "" ? (
+            <>
+              <span className="font-semibold">{act.cta}</span> — {act.note}
+            </>
+          ) : (
+            act.note
+          )}
         </p>
-      )}
-      {act.cta === "" && (
-        <p className="text-xs text-[#3ec8ff]" data-testid="timeline-cta-note">
-          {act.note}
-        </p>
-      )}
+        {act.cta !== "" && (
+          <span
+            data-testid="timeline-cta-chevron"
+            aria-hidden
+            className="text-sm font-semibold text-[#3ec8ff]"
+          >
+            ›
+          </span>
+        )}
+      </div>
     </section>
   );
 };
