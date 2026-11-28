@@ -14,8 +14,8 @@ import { maybeSendReceipt } from "../sendReceipt";
 const WALLET = "0xabc0000000000000000000000000000000000123";
 const HASH = `0x${"b2".repeat(32)}`;
 const CTX = { wallet: WALLET, userOpHash: HASH, usdc: "5.00" };
-const GRANTED = { data: { permissions: { notifications: true } } };
-const DENIED = { data: { permissions: { notifications: false } } };
+const GRANTED = { data: { status: 'success', permissions: { notifications: true } } };
+const DENIED = { data: { status: 'success', permissions: { notifications: false } } };
 
 type Call = { url: string; body: any };
 let calls: Call[];
