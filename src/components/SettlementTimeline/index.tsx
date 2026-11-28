@@ -111,7 +111,11 @@ export const SettlementTimeline = ({ bill }: { bill: string }) => {
           )}
         </p>
         {act.cta !== "" && (
-          <span aria-hidden className="text-sm font-semibold text-[#3ec8ff]">
+          <span
+            data-testid="timeline-cta-chevron"
+            aria-hidden
+            className="text-sm font-semibold text-[#3ec8ff]"
+          >
             ›
           </span>
         )}

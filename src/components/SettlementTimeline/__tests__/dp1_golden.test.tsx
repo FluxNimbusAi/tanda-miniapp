@@ -74,9 +74,11 @@ describe("dp1 settlement-timeline card rhythm", () => {
   });
 
   it("next-action CTA renders as bar with chevron when actionable", async () => {
+    // Canonical vocabulary: empty feed + no seats -> first incomplete step is
+    // 'funded', so the CTA path is live. Ad-hoc 'kind' rows are not feed law.
     const card = await renderSettled(
-      [{ kind: "bill_created" }],
-      { [BILL]: true },
+      [],
+      {},
     );
     const cta = card.querySelector("[data-testid='timeline-cta-note']");
     expect(cta).not.toBeNull();
@@ -84,7 +86,7 @@ describe("dp1 settlement-timeline card rhythm", () => {
   });
 
   it("no-CTA path stays honest text inside the same bar anchor", async () => {
-    global.fetch = mockFetch([], {}) as unknown as typeof fetch;
+    global.fetch = mockFetch(SETTLED_EVENTS, { [BILL]: true }) as unknown as typeof fetch;
     const { SettlementTimeline } = await import("@/components/SettlementTimeline");
     render(<SettlementTimeline bill={BILL} />);
     const cta = await screen.findByTestId("timeline-cta-note");
