@@ -2,18 +2,26 @@ import { auth } from '@/auth';
 import ClientProviders from '@/providers';
 import '@worldcoin/mini-apps-ui-kit-react/styles.css';
 import type { Metadata } from 'next';
-import { Geist, Geist_Mono } from 'next/font/google';
+import localFont from 'next/font/local';
 import './globals.css';
 import { TrackOpen } from "@/components/TrackOpen";
 
-const geistSans = Geist({
+// PERF-WAVE (Lighthouse mobile 69 → ≥90): Google Fonts was a render-blocking
+// network waterfall (FCP 3.1s). Self-hosted next/font/local: zero network fetch,
+// variable woff2 baked at build time, pinned with sha256 in the proof trail.
+// 15.5.29 contract verified on disk: next/font/local is default-export only.
+const geistSans = localFont({
+  src: '../fonts/Geist-Variable.woff2',
   variable: '--font-geist-sans',
-  subsets: ['latin'],
+  weight: '100 900',
+  display: 'swap',
 });
 
-const geistMono = Geist_Mono({
+const geistMono = localFont({
+  src: '../fonts/GeistMono-Variable.woff2',
   variable: '--font-geist-mono',
-  subsets: ['latin'],
+  weight: '100 900',
+  display: 'swap',
 });
 
 export const metadata: Metadata = {
