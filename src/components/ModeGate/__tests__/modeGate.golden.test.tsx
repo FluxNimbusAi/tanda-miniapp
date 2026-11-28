@@ -6,6 +6,10 @@
 //                            Explorer ONLY, with ZERO wallet affordances and
 //                            a GET-only network surface.
 //   flip true->false       -> Explorer renders (route-level reactive gate).
+//   KAIZEN-8 ladder        -> degraded reads surface LAST-KNOWN-GOOD (server
+//                            cache replay or browser snapshot) as
+//                            indexer: cached + as-of chip; only a true cold
+//                            miss shows indexer: offline.
 // Data lane pins the PR #22 settlements + SR-003 bill-lifecycle readback with
 // the W10 first-real-bill payload (bill be4326..., execute tx ae4a5890...):
 // all four lifecycle events + derived status 'executed' + 0.020000 USDC.
@@ -18,6 +22,7 @@ const H = vi.hoisted(() => ({
   isInstalled: undefined as boolean | undefined,
   fetchCalls: [] as { url: string; method: string }[],
   liveFails: false,
+  liveBody: null as Record<string, unknown> | null,
 }));
 
 vi.mock('@worldcoin/minikit-js/minikit-provider', () => ({
@@ -100,6 +105,8 @@ const chip = (re: RegExp) =>
 beforeEach(() => {
   H.fetchCalls.length = 0;
   H.liveFails = false;
+  H.liveBody = null;
+  window.localStorage.clear(); // KAIZEN-8: snapshots never bleed across goldens
   vi.stubGlobal(
     'fetch',
     vi.fn(async (input: string | Request, init?: RequestInit) => {
@@ -108,6 +115,7 @@ beforeEach(() => {
       H.fetchCalls.push({ url, method });
       if (url.includes('/api/live-status')) {
         if (H.liveFails) throw new TypeError('fetch failed');
+        if (H.liveBody) return jsonResponse(H.liveBody);
         return jsonResponse({ ...LIVE_STATUS, indexed: true });
       }
       if (url.includes('/api/settlements')) return jsonResponse(SETTLE_FEED);
@@ -169,6 +177,57 @@ describe('W2.5-3 dual-mode gate', () => {
   it('indexer offline degrades the Explorer, never an error state', async () => {
     H.isInstalled = false;
     H.liveFails = true;
+    const ModeGate = await gate();
+    render(<ModeGate />);
+    expect(await screen.findByText(/Watch it happen/)).toBeInTheDocument();
+    await waitFor(() => expect(chip(/indexer: offline/)).toBeInTheDocument());
+  });
+
+  it('warm server cache renders last-known-good chips + as-of, not offline', async () => {
+    H.isInstalled = false;
+    H.liveBody = {
+      ...LIVE_STATUS,
+      indexed: false,
+      source: 'cache',
+      stale: true,
+      as_of: 1764290000,
+      note: 'indexer unreachable; showing last-known-good',
+    };
+    const ModeGate = await gate();
+    render(<ModeGate />);
+    expect(await screen.findByText(/Watch it happen/)).toBeInTheDocument();
+    await waitFor(() => expect(chip(/indexer: cached/)).toBeInTheDocument());
+    expect(chip(/bills indexed: 18/)).toBeInTheDocument();
+    expect(chip(/as of: /)).toBeInTheDocument();
+  });
+
+  it('cold server + browser snapshot still degrades to cached, never offline', async () => {
+    H.isInstalled = false;
+    H.liveFails = true;
+    window.localStorage.setItem(
+      'tanda.explorer.live-snapshot.v1',
+      JSON.stringify({
+        body: { ...LIVE_STATUS, indexed: true },
+        savedAt: Math.floor(Date.now() / 1000) - 600,
+      }),
+    );
+    const ModeGate = await gate();
+    render(<ModeGate />);
+    expect(await screen.findByText(/Watch it happen/)).toBeInTheDocument();
+    await waitFor(() => expect(chip(/indexer: cached/)).toBeInTheDocument());
+    expect(chip(/settlements: 1/)).toBeInTheDocument();
+  });
+
+  it('expired browser snapshot (>24h) honestly reads offline, not cached', async () => {
+    H.isInstalled = false;
+    H.liveFails = true;
+    window.localStorage.setItem(
+      'tanda.explorer.live-snapshot.v1',
+      JSON.stringify({
+        body: { ...LIVE_STATUS, indexed: true },
+        savedAt: Math.floor(Date.now() / 1000) - 25 * 3600,
+      }),
+    );
     const ModeGate = await gate();
     render(<ModeGate />);
     expect(await screen.findByText(/Watch it happen/)).toBeInTheDocument();
