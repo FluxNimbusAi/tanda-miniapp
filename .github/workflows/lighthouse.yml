@@ -1,0 +1,40 @@
+name: Lighthouse Mobile Audit (Performance)
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "src/app/**"
+      - ".github/workflows/lighthouse.yml"
+
+jobs:
+  lighthouse-mobile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Start prod server
+        run: |
+          npx next start -p 3005 &
+          sleep 8
+          curl -fsS http://127.0.0.1:3005/home > /dev/null
+      - name: Lighthouse mobile (performance only)
+        run: |
+          npx --yes lighthouse@13.6.0 http://127.0.0.1:3005/home \
+            --form-factor=mobile \
+            --only-categories=performance \
+            --output=json \
+            --output-path=lh_ci.json \
+            --chrome-flags="--headless=new"
+      - name: Parse score
+        run: |
+          python3 -c "import json; j=json.load(open('lh_ci.json')); s=j['categories']['performance']['score']; print('PERF_SCORE', round(s*100)); raise SystemExit(0 if s is not None else 1)"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lighthouse-mobile-json
+          path: lh_ci.json
