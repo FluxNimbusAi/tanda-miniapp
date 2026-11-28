@@ -54,6 +54,9 @@ function loadTs(file: string): { createElement: unknown } {
     }
     if (id.startsWith(".")) {
       const p = resolve(dirname(file), id);
+      // KAIZEN-9: honor ids that ALREADY carry their extension (".ts" ids are
+      // the node type-stripping doctrine used across this lane).
+      if (/\.(ts|tsx)$/.test(p) && existsSync(p)) return loadTs(p);
       for (const cand of [
         `${p}.tsx`,
         `${p}.ts`,
@@ -187,4 +190,55 @@ test("empty vector renders a neutral accessible state", () => {
   );
   assert.ok(html.includes("nothing to settle"), "neutral empty copy");
   assert.ok(html.includes("<caption"), "captioned even when empty");
+});
+
+// ---------------------------------------------------------------------------
+// KAIZEN-9 (t_5dbc6910) — CONTRACT CHANGE per the World display law
+// (docs.world.org/mini-apps/guidelines/app-guidelines, verified 2026-11-27):
+// when a names map is supplied, identity cells AND the sr-only canonical text
+// show @handles instead of wallet bytes; unresolved wallets fail-soft to the
+// canonical short address. The no-names default staying byte-identical to the
+// committed golden above (passing UNMODIFIED) is the fail-soft regression pin.
+// ---------------------------------------------------------------------------
+test("KAIZEN-9: names map -> @handles replace address bytes in cells + sr-only", () => {
+  const names = new Map([
+    [W(1), "alice"],
+    [W(2), "bob"],
+    [W(3), "carol"],
+  ]);
+  const html = ReactDOMServer.renderToStaticMarkup(
+    React.createElement(SettlementVectorTable, { vector, names }),
+  );
+  const text = renderSettlementVectorText(vector, names);
+  const escaped = text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#x27;");
+  // sr-only bytes STILL match the named canonical rendering (visible==reader).
+  assert.ok(
+    html.includes(escaped),
+    "sr-only block is the named canonical text",
+  );
+  // Row identity: resolved seats show handles, never address bytes.
+  assert.ok(text.includes("seat=0 wallet=@alice"), "row 0 pins @alice");
+  assert.ok(text.includes("seat=1 wallet=@bob"), "row 1 pins @bob");
+  assert.ok(text.includes("seat=2 wallet=@carol"), "row 2 pins @carol");
+  assert.ok(
+    !text.includes("wallet=0x0000"),
+    "no short address in resolved rows",
+  );
+  // Expense trace: known payer -> handle; unknown payer -> fail-soft short addr.
+  assert.ok(
+    text.includes("expense #0: 6000000 units paid by 0x0000…0009"),
+    "unknown payer W(9) fail-softs to canonical short address",
+  );
+  assert.ok(
+    text.includes("expense #1: 4000000 units paid by @alice"),
+    "known payer W(1) shows @handle",
+  );
+  // Visible cells (markup), not just sr-only:
+  for (const h of ["@alice", "@bob", "@carol"])
+    assert.ok(html.includes(h), `${h} visible in table markup`);
 });

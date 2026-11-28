@@ -23,6 +23,12 @@
 // the share. The flag is computed off-chain by the caller; this contract only
 // transports, explains and serializes it.
 
+import {
+  labelFor,
+  shortAddress,
+  type NamesByWallet,
+} from "./identityDisplay.ts";
+
 export const TOKEN_SCALE = 6; // USDC 6 decimals — frozen canonical token
 
 /** Exact sentence fragment appended to an anomalous component's explanation. */
@@ -112,8 +118,10 @@ export function formatUnits6(units: bigint): string {
   return `${neg ? "-" : ""}${s.slice(0, -6)}.${s.slice(-6)}`;
 }
 
-const shortWallet = (wallet: string): string =>
-  `${wallet.slice(0, 6)}…${wallet.slice(-4)}`;
+// KAIZEN-9 (t_5dbc6910): kept as the canonical fallback so a no-names render
+// stays byte-identical to the frozen golden (identityLabel's short form is
+// the same function — pinned by src/lib/__tests__/identityDisplay.test.ts).
+const shortWallet = shortAddress;
 
 /** One deterministic sentence explaining payout = base + (rank < remainder ? 1 : 0). */
 export function describePayout(c: {
@@ -380,7 +388,10 @@ export function serializeSettlementVector(v: SettlementVector): string {
  * the sr-only block P1.4b's accessible component will embed. Same vector in ⇒
  * same bytes out on every machine (no locale, no clock, no randomness).
  */
-export function renderSettlementVectorText(v: SettlementVector): string {
+export function renderSettlementVectorText(
+  v: SettlementVector,
+  names?: NamesByWallet,
+): string {
   const lines: string[] = [];
   lines.push(`SETTLEMENT #${v.settlementId.toString()}`);
   lines.push(
@@ -391,7 +402,7 @@ export function renderSettlementVectorText(v: SettlementVector): string {
     lines.push(`expense trace: ${v.expenseTrace.length} entries`);
     for (const e of v.expenseTrace) {
       lines.push(
-        `  expense #${e.id}: ${e.amount.toString()} units paid by ${shortWallet(e.paidBy)}`,
+        `  expense #${e.id}: ${e.amount.toString()} units paid by ${labelFor(names, e.paidBy)}`,
       );
     }
   } else {
@@ -403,7 +414,7 @@ export function renderSettlementVectorText(v: SettlementVector): string {
     lines.push("rows:");
     for (const c of v.components) {
       lines.push(
-        `  rank=${c.rank} seat=${c.seatId} wallet=${shortWallet(c.wallet)} ` +
+        `  rank=${c.rank} seat=${c.seatId} wallet=${labelFor(names, c.wallet)} ` +
           `payout=${c.payout.toString()} derivation=${c.derivation.base.toString()}+${c.derivation.getsRemainderUnit ? "1" : "0"} ` +
           `anomaly=${c.rotationAnomaly}`,
       );
