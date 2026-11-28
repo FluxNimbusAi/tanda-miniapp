@@ -75,7 +75,7 @@ import { worldchainSepolia } from "viem/chains";
 import {
   createPublicClient,
   encodeFunctionData,
-  toBytes,
+  stringToHex,
   formatUnits,
   http,
   isAddress,
@@ -1022,7 +1022,13 @@ export const TandaBill = ({
           {/* BRIDGE-2 (t_a9f67ed4): owner-side on-chain nullifier burn.
               Portal-verified grants (real 66-hex nullifiers only; chain
               placeholders excluded by shape) not yet active seats.
-              Same sendAction choke point -> ConfirmPreview -> MiniKit. */}
+              Same sendAction choke point -> ConfirmPreview -> MiniKit.
+              APP-2 (t_e723c7f3): registerSeat now rides the billAction
+              callBill wrapper like every other write — the old direct-clone
+              target (to=billAddr) failed MiniKit's invalid_contract gate
+              (only factory + USDC are portal entrypoints); the V2 forwarder
+              resolves the owner via _caller() (contract L222), so the
+              wrapper is zero-contract-change. moneySheet.golden pins it. */}
           {isOwner && SEAT_BURN_ENABLED && pendingBurns.length > 0 && (
             <div className="grid gap-1" data-testid="pending-seat-burns">
               <p className="text-xs font-semibold opacity-80">
@@ -1042,17 +1048,22 @@ export const TandaBill = ({
                   <button
                     type="button"
                     className="rounded px-3 py-1 text-xs font-semibold"
-                    onClick={() =>
-                      sendAction(
+                    onClick={() => {
+                      // APP-2: to is ALWAYS the static factory — billAction
+                      // wraps registerSeat(clone) in factory.callBill so the
+                      // userOp passes the portal entrypoint gate. signal is
+                      // the canonical UTF-8 string; viem bytes params need
+                      // stringToHex (toBytes yields Uint8Array and throws
+                      // inside encodeAbiParameters — BRIDGE-2 latent bug the
+                      // golden now pins).
+                      const a = billAction(
+                        billAddr,
+                        TANDA.factory,
                         "registerSeat",
-                        billAddr as Address,
-                        encodeFunctionData({
-                          abi: BillABI,
-                          functionName: "registerSeat",
-                          args: [pb.nullifier, pb.wallet, toBytes(pb.signal)],
-                        }),
-                      )
-                    }
+                        [pb.nullifier, pb.wallet, stringToHex(pb.signal)],
+                      );
+                      void sendAction("registerSeat", a.to, a.data);
+                    }}
                   >
                     Burn seat on-chain
                   </button>
