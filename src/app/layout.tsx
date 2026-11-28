@@ -42,8 +42,16 @@ export const metadata: Metadata = {
   },
   twitter: { card: 'summary_large_image', title: 'TandaBill', description: 'Escrowed settlement between verified humans.' },
   icons: { icon: '/favicon.ico', apple: '/icon-192.png' },
-  manifest: '/manifest.webmanifest',
+  manifest: MANIFEST_URL,
 };
+
+// PERF-PASS 2026-11-28 (brief dayshift_PERF-PASS_20261128_1115): the PWA manifest
+// was the top finding — a cold-discovery hop on the network dependency tree
+// (audit scored 0). Preload must target exactly the metadata URL; wrong `as`
+// double-fetches, so URL and attributes are pinned in perfPassManifest.golden.test.ts.
+const MANIFEST_URL = '/manifest.webmanifest';
+
+
 
 // SSR-SHELL (V5 audit card 1, white-screen kill): an unbounded `await auth()`
 // in the root layout blocks time-to-first-byte for EVERY lane — inside World
@@ -72,6 +80,10 @@ export default async function RootLayout({
   const session = await sessionWithBudget();
   return (
     <html lang="en">
+      <head>
+        <link rel="preload" href={MANIFEST_URL} as="fetch" crossOrigin="anonymous" />
+      </head>
+      
       <body className={`${geistSans.variable} ${geistMono.variable} `}>
         <TrackOpen />
         <ClientProviders session={session}>{children}</ClientProviders>
