@@ -11,6 +11,9 @@
 //      no MiniKit command — nothing that could transact.
 //   2. GET-only network: this component never issues a mutating request.
 //   3. Degrade, never error: indexer down -> offline chips + friendly copy.
+// KAIZEN-8 (t_59d90ce4) degrade ladder: live -> LAST-KNOWN-GOOD (warm server
+// cache replay, then a 24h-ttl browser snapshot) -> offline. Public visitors
+// no longer see indexer:offline merely because the edge cannot dial loopback.
 import { formatUnits6 } from "@/lib/settlementVector";
 import { useCallback, useEffect, useState } from "react";
 
@@ -23,6 +26,9 @@ type LiveStatus = {
   settlements?: number;
   verifications?: number;
   note?: string;
+  // KAIZEN-8 ladder tags from /api/live-status.
+  source?: 'live' | 'cache';
+  as_of?: number;
 };
 type Feed = {
   bill?: string;
@@ -35,6 +41,36 @@ type Feed = {
 type Grants = { grants?: Record<string, { verified_at?: number }> };
 
 const ADDR_RE = /^0x[a-fA-F0-9]{40}$/;
+
+// KAIZEN-8 last-known-good snapshot: browsers remember the last LIVE status
+// strip, because public deploys run on ephemeral edge instances whose warm
+// cache may be cold on a visitor's hit. TTL-bounded; junk/expired entries
+// read as 'no snapshot' so the honest offline label still applies.
+const SNAP_KEY = "tanda.explorer.live-snapshot.v1";
+const SNAP_MAX_AGE_S = 24 * 3600;
+type Snapshot = { body: LiveStatus; savedAt: number };
+const readSnapshot = (): Snapshot | null => {
+  try {
+    const raw = window.localStorage.getItem(SNAP_KEY);
+    if (!raw) return null;
+    const snap = JSON.parse(raw) as Snapshot;
+    if (!snap || !snap.body || snap.body.indexed !== true) return null;
+    const age = Math.floor(Date.now() / 1000) - Number(snap.savedAt);
+    if (!Number.isFinite(age) || age < 0 || age > SNAP_MAX_AGE_S) return null;
+    return { body: snap.body, savedAt: Number(snap.savedAt) };
+  } catch {
+    return null; // storage disabled or poisoned payload -> first visit
+  }
+};
+const writeSnapshot = (body: LiveStatus): number => {
+  const savedAt = Math.floor(Date.now() / 1000);
+  try {
+    window.localStorage.setItem(SNAP_KEY, JSON.stringify({ body, savedAt }));
+  } catch {
+    /* private mode: the snapshot is a bonus, never a dependency */
+  }
+  return savedAt;
+};
 
 const fmtUSDC = (units: unknown): string => {
   const n = Number(units);
@@ -51,6 +87,14 @@ const short = (v: unknown): string => {
   const s = String(v ?? "");
   return s.length > 16 ? `${s.slice(0, 10)}…${s.slice(-6)}` : s || "—";
 };
+// KAIZEN-8 caption for cached states: locale time, minute precision.
+const fmtAsOf = (sec: number): string =>
+  new Date(sec * 1000).toLocaleString([], {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 // SR-003 precedence (golden contract in src/app/settlements):
 // refunded > executed > fully_confirmed > initiated.
 const deriveStatus = (r: Record<string, unknown>): string => {
@@ -68,6 +112,7 @@ const Chip = ({ label, value }: { label: string; value: string }) => (
 
 export const LiveExplorer = () => {
   const [status, setStatus] = useState<LiveStatus | null>(null);
+  const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [bill, setBill] = useState("");
   const [feed, setFeed] = useState<Feed | null>(null);
   const [seatCount, setSeatCount] = useState<number | null>(null);
@@ -79,10 +124,20 @@ export const LiveExplorer = () => {
     fetch("/api/live-status")
       .then((r) => r.json())
       .then((b: LiveStatus) => {
-        if (alive) setStatus(b);
+        if (!alive) return;
+        setStatus(b);
+        if (b.indexed) {
+          // Fresh live read: remember it for later edge-cache misses.
+          setSnapshot({ body: b, savedAt: writeSnapshot(b) });
+        } else {
+          // Degraded answer: fall to whatever the browser last saw live.
+          setSnapshot(readSnapshot());
+        }
       })
       .catch(() => {
-        if (alive) setStatus({ indexed: false });
+        if (!alive) return;
+        setStatus({ indexed: false });
+        setSnapshot(readSnapshot());
       });
     return () => {
       alive = false;
@@ -115,8 +170,25 @@ export const LiveExplorer = () => {
 
   const rows = feed?.settlements ?? [];
   const events = feed?.events ?? [];
+  // KAIZEN-8 ladder: live -> last-known-good (server warm cache first, then
+  // browser snapshot) -> offline. Cached rows always carry their timestamp.
+  const cached =
+    status !== null && !status.indexed
+      ? status.source === "cache" && typeof status.as_of === "number"
+        ? { body: status as LiveStatus, stamp: status.as_of }
+        : snapshot
+          ? { body: snapshot.body, stamp: snapshot.savedAt }
+          : null
+      : null;
   const indexerState =
-    status === null ? "…" : status.indexed ? "live" : "offline";
+    status === null
+      ? "…"
+      : status.indexed
+        ? "live"
+        : cached
+          ? "cached"
+          : "offline";
+  const data = cached && !status?.indexed ? cached.body : status;
 
   return (
     <main className="mx-auto flex min-h-dvh w-full max-w-2xl flex-col gap-6 px-6 py-10">
@@ -141,47 +213,55 @@ export const LiveExplorer = () => {
         className="flex flex-wrap gap-2 text-xs"
       >
         <Chip label="indexer" value={indexerState} />
+        {cached && <Chip label="as of" value={fmtAsOf(cached.stamp)} />}
         <Chip
           label="chain"
-          value={status?.chain_id === undefined ? "—" : String(status.chain_id)}
+          value={data?.chain_id === undefined ? "—" : String(data.chain_id)}
         />
         <Chip
           label="bills indexed"
           value={
-            status?.bills_indexed === undefined
+            data?.bills_indexed === undefined
               ? "—"
-              : String(status.bills_indexed)
+              : String(data.bills_indexed)
           }
         />
         <Chip
           label="bills resolved"
           value={
-            status?.bills_resolved === undefined
+            data?.bills_resolved === undefined
               ? "—"
-              : String(status.bills_resolved)
+              : String(data.bills_resolved)
           }
         />
         <Chip
           label="settlements"
           value={
-            status?.settlements === undefined ? "—" : String(status.settlements)
+            data?.settlements === undefined ? "—" : String(data.settlements)
           }
         />
         <Chip
           label="seat grants"
           value={
-            status?.seat_grants === undefined ? "—" : String(status.seat_grants)
+            data?.seat_grants === undefined ? "—" : String(data.seat_grants)
           }
         />
         <Chip
           label="verifications"
           value={
-            status?.verifications === undefined
+            data?.verifications === undefined
               ? "—"
-              : String(status.verifications)
+              : String(data.verifications)
           }
         />
       </section>
+
+      {cached && (
+        <p className="text-xs opacity-70">
+          The live indexer could not be reached — numbers above are the last
+          known-good snapshot from {fmtAsOf(cached.stamp)}.
+        </p>
+      )}
 
       <form
         className="flex flex-col gap-2 sm:flex-row"

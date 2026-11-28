@@ -1,7 +1,10 @@
 // W2.5-3 /api/live-status proxy contract (browser Explorer status strip):
-// (a) health passthrough gains indexed:true, (b) non-200 upstream degrades to
-// {indexed:false} at 200, (c) fetch throw degrades the same way. The
-// Explorer must never observe an error state. Zero network: fetch stubbed.
+// (a) health passthrough gains indexed:true + source:'live' + as_of (KAIZEN-8
+// stamps every live read), (b) non-200 upstream degrades to {indexed:false}
+// at 200, (c) fetch throw degrades the same way, (d) a warm instance holding
+// a last-known-good snapshot replays it tagged {source:'cache', stale:true,
+// as_of} instead of pretending offline. The Explorer must never observe an
+// error state. Zero network: fetch stubbed.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 type Body = Record<string, unknown>;
@@ -40,6 +43,8 @@ describe('GET /api/live-status', () => {
       chain_id: 4801,
       bills_indexed: 18,
       indexed: true,
+      source: 'live',
+      as_of: expect.any(Number),
     });
     expect(seen).toEqual(['http://idx.test/health']);
   });
@@ -66,5 +71,43 @@ describe('GET /api/live-status', () => {
     expect(status).toBe(200);
     expect(body.indexed).toBe(false);
     expect(String(body.note)).toContain('indexer unavailable');
+  });
+
+  it('warm instance replays last-known-good tagged + timestamped when the indexer dies', async () => {
+    process.env.BILL_INDEX_URL = 'http://idx.test';
+    vi.resetModules();
+    const { GET } = await import('../route');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        new Response(
+          JSON.stringify({ status: 'ok', chain_id: 4801, bills_indexed: 18 }),
+          { status: 200 },
+        ),
+      ),
+    );
+    const live = (await (await GET()).json()) as Body;
+    expect(live.indexed).toBe(true);
+    expect(live.source).toBe('live');
+    // Same module instance; upstream now unreachable.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        throw new TypeError('fetch failed');
+      }),
+    );
+    const res = await GET();
+    const body = (await res.json()) as Body;
+    expect(res.status).toBe(200);
+    expect(body).toEqual({
+      status: 'ok',
+      chain_id: 4801,
+      bills_indexed: 18,
+      indexed: false,
+      source: 'cache',
+      stale: true,
+      as_of: live.as_of,
+      note: 'indexer unreachable; showing last-known-good',
+    });
   });
 });
