@@ -14,10 +14,10 @@ import { maybeSendReceipt } from "../sendReceipt";
 const WALLET = "0xabc0000000000000000000000000000000000123";
 const HASH = `0x${"b2".repeat(32)}`;
 const CTX = { wallet: WALLET, userOpHash: HASH, usdc: "5.00" };
-const GRANTED = { data: { permissions: { notifications: true } } };
-const DENIED = { data: { permissions: { notifications: false } } };
+const GRANTED = { data: { status: 'success', permissions: { notifications: true } } };
+const DENIED = { data: { status: 'success', permissions: { notifications: false } } };
 
-type Call = { url: string; body: any };
+type Call = { url: string; body: Record<string, unknown> };
 let calls: Call[];
 
 const stub = (notify: () => Promise<Response>) => {
@@ -25,7 +25,7 @@ const stub = (notify: () => Promise<Response>) => {
     "fetch",
     vi.fn(async (url: string, init?: { body?: string }) => {
       const u = String(url);
-      calls.push({ url: u, body: init?.body ? JSON.parse(init.body) : undefined });
+      calls.push({ url: u, body: init?.body ? JSON.parse(init.body) : {} });
       if (u.includes("/api/track")) return Response.json({ ok: true }, { status: 202 });
       return notify();
     }),
@@ -36,7 +36,7 @@ const flush = () => new Promise((r) => setTimeout(r, 0));
 beforeEach(() => {
   calls = [];
   getPermissions.mockReset();
-  getPermissions.mockResolvedValue(GRANTED as any);
+  getPermissions.mockResolvedValue(GRANTED);
 });
 afterEach(() => vi.unstubAllGlobals());
 
@@ -59,7 +59,7 @@ describe("maybeSendReceipt", () => {
   });
 
   it("permission NOT granted → 'skipped', zero /api/notify calls, zero prompts", async () => {
-    getPermissions.mockResolvedValue(DENIED as any);
+    getPermissions.mockResolvedValue(DENIED);
     stub(async () => Response.json({ ok: true }));
     expect(await maybeSendReceipt("claimSettlement", CTX)).toBe("skipped");
     expect(calls.filter((c) => c.url.includes("/api/notify"))).toHaveLength(0);

@@ -23,8 +23,13 @@ export async function maybeSendReceipt(
   // unavailable) means "cannot receive", so skip silently.
   try {
     const perm = await MiniKit.getPermissions();
-    // biome-ignore lint/suspicious/noExplicitAny: permissions payload is loosely typed in 2.x (same cast law as NotificationConsent)
-    const granted = (perm.data?.permissions as Record<string, unknown> | undefined)?.notifications === true;
+    // CI typecheck law (tsc --noEmit): the 2.x return is a discriminated
+    // union — permissions is readable ONLY on the success payload, same
+    // status-gate as NotificationConsent/index.tsx L32.
+    const granted =
+      perm.data?.status === "success" &&
+      // biome-ignore lint/suspicious/noExplicitAny: permissions payload is loosely typed in 2.x (same cast law as NotificationConsent)
+      (perm.data.permissions as Record<string, unknown> | undefined)?.notifications === true;
     if (!granted) return "skipped";
   } catch {
     return "skipped";
