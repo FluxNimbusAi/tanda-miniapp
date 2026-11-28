@@ -24,6 +24,14 @@ const geistMono = localFont({
   display: 'swap',
 });
 
+// PERF-PASS 2026-11-28 (brief dayshift_PERF-PASS_20261128_1115): the PWA manifest
+// was the top finding — a cold-discovery hop on the network dependency tree
+// (audit scored 0). Preload must target exactly the metadata URL; wrong `as`
+// double-fetches, so URL and attributes are pinned in perfPassManifest.golden.test.ts.
+// FIX-TICK 2026-11-28: const MUST precede metadata — `const` is block-scoped,
+// declaring it below caused TS2448/TS2454 (CI red on PR #90).
+const MANIFEST_URL = '/manifest.webmanifest';
+
 export const metadata: Metadata = {
   title: 'Tanda — proof-escrow settlement between provably-unique humans',
   description:
@@ -42,7 +50,7 @@ export const metadata: Metadata = {
   },
   twitter: { card: 'summary_large_image', title: 'TandaBill', description: 'Escrowed settlement between verified humans.' },
   icons: { icon: '/favicon.ico', apple: '/icon-192.png' },
-  manifest: '/manifest.webmanifest',
+  manifest: MANIFEST_URL,
 };
 
 // SSR-SHELL (V5 audit card 1, white-screen kill): an unbounded `await auth()`
@@ -72,6 +80,10 @@ export default async function RootLayout({
   const session = await sessionWithBudget();
   return (
     <html lang="en">
+      <head>
+        <link rel="preload" href={MANIFEST_URL} as="fetch" crossOrigin="anonymous" />
+      </head>
+      
       <body className={`${geistSans.variable} ${geistMono.variable} `}>
         <TrackOpen />
         <ClientProviders session={session}>{children}</ClientProviders>
