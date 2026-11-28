@@ -1,8 +1,8 @@
 "use client";
 
 import { TabItem, Tabs } from "@worldcoin/mini-apps-ui-kit-react";
-import { Bank, Home, User } from "iconoir-react";
-import { usePathname, useRouter } from "next/navigation";
+import { Bank, Home, Plus, User } from "iconoir-react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 /**
  * Bottom navigation (mobile-first, World mini-app guidelines) — but the
@@ -13,6 +13,7 @@ import { usePathname, useRouter } from "next/navigation";
  */
 const TAB_ROUTES: Record<string, string> = {
   home: "/home",
+  new: "/home?intent=create",
   wallet: "/explorer",
   profile: "/profile",
 };
@@ -20,11 +21,15 @@ const TAB_ROUTES: Record<string, string> = {
 export const Navigation = () => {
   const pathname = usePathname();
   const router = useRouter();
+  const sp = useSearchParams();
+  const isNew = sp.get("intent") === "create";
   const value =
     Object.entries(TAB_ROUTES).find(([, route]) =>
       route === "/home"
-        ? pathname === "/home" || pathname.startsWith("/bill")
-        : pathname.startsWith(route),
+        ? (pathname === "/home" || pathname.startsWith("/bill")) && !isNew
+        : route.startsWith("/home")
+          ? pathname.startsWith("/home") && isNew
+          : pathname.startsWith(route),
     )?.[0] ?? "home";
 
   return (
@@ -33,6 +38,7 @@ export const Navigation = () => {
       onValueChange={(v: string) => router.push(TAB_ROUTES[v] ?? "/home")}
     >
       <TabItem value="home" icon={<Home />} label="Home" />
+      <TabItem value="new" icon={<Plus />} label="New" />
       <TabItem value="wallet" icon={<Bank />} label="Explorer" />
       <TabItem value="profile" icon={<User />} label="Profile" />
     </Tabs>

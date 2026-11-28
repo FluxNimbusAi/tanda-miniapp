@@ -401,6 +401,12 @@ export const TandaBill = ({
   // BS-4.1: empty-state gate — a brand-new user sees the pull-to-first-value
   // screen; one tap reveals the create form (spec §5: create in ≤3 taps).
   const [createRevealed, setCreateRevealed] = useState(false);
+  // APP-1: the New tab lands on /home?intent=create — reveal the form at once
+  // (spec §5 create-in-<=3-taps; from a tab tap it is now ONE).
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("intent") === "create")
+      setCreateRevealed(true);
+  }, []);
   const [snap, setSnap] = useState<BillSnapshot | null>(null);
   const [seats, setSeats] = useState<SeatRow[]>([]);
   // BRIDGE-2 (t_a9f67ed4): portal-verified grants awaiting the on-chain burn.
